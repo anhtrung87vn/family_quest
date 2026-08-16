@@ -95,7 +95,7 @@ export default async function SettingsPage() {
             </div>
 
             {tempCount > 0 && (
-              <form action={deleteAllTempEvidence}>
+              <form action={async (fd) => { await deleteAllTempEvidence(fd); }}>
                 <Button type="submit" variant="danger" size="sm" className="w-full text-xs">
                   🗑 {t("settings.deleteAllTemp", { count: tempCount })}
                 </Button>
