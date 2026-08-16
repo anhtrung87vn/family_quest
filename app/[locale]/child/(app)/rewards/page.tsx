@@ -7,8 +7,10 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { requestRewardAction, setDreamRewardAction } from "../actions";
+import { setDreamRewardAction } from "../actions";
+import { RedeemButton } from "@/components/ui/RedeemButton";
 import { CookieToast } from "@/components/ui/CookieToast";
+import { redirect } from "@/lib/i18n/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +22,14 @@ export default async function ChildRewards({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const session = (await getChildSession())!;
+  const sessionOrNull = await getChildSession();
+  if (!sessionOrNull) redirect({ href: "/child/select", locale });
+  const session = sessionOrNull!;
   const admin = createAdminClient();
 
   const [{ data: rewards }, { data: redemptions }, { coin }, { data: childRow }] = await Promise.all([
     admin.from("rewards")
-      .select("id, name, description, coin_cost, category, dream_eligible, stock")
+      .select("id, name, description, coin_cost, category, dream_eligible, stock, image_url, link_url")
       .eq("family_id", session.familyId)
       .eq("active", true)
       .order("coin_cost"),
@@ -156,13 +160,22 @@ export default async function ChildRewards({
                     canAfford && inStock ? `${style.border} ${style.bg}` : "border-stone-200 bg-white"
                   }`}
                 >
-                  {/* Category accent stripe */}
-                  <div className={`h-1.5 w-full ${style.accent}`} />
+                  {/* Category accent stripe or image */}
+                  {(r as any).image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={(r as any).image_url} alt={r.name} className="h-24 w-full object-cover" />
+                  ) : (
+                    <div className={`h-1.5 w-full ${style.accent}`} />
+                  )}
 
                   <div className="flex flex-1 flex-col items-center p-3">
-                    <span className="mb-1.5 text-3xl">{icon}</span>
+                    {!(r as any).image_url && <span className="mb-1.5 text-3xl">{icon}</span>}
                     <div className="mb-0.5 text-sm font-semibold leading-tight text-stone-800">{r.name}</div>
-                    <div className="mb-2 text-xs font-bold text-amber-600">🪙 {r.coin_cost.toLocaleString()}</div>
+                    <div className="mb-1 text-xs font-bold text-amber-600">🪙 {r.coin_cost.toLocaleString()}</div>
+                    {(r as any).link_url && (
+                      <a href={(r as any).link_url} target="_blank" rel="noopener noreferrer"
+                        className="mb-1 text-[10px] text-blue-500 hover:underline">🔗 Xem chi tiết</a>
+                    )}
 
                     {/* Progress / affordability state */}
                     {canAfford && inStock ? (
@@ -190,12 +203,7 @@ export default async function ChildRewards({
                         </form>
                       )}
                       {canAfford && inStock && (
-                        <form action={requestRewardAction} className="flex-1">
-                          <input type="hidden" name="reward_id" value={r.id} />
-                          <Button size="sm" type="submit" className="w-full bg-emerald-500 text-xs font-bold text-white hover:bg-emerald-600">
-                            🎁 {t("child.redeem")}
-                          </Button>
-                        </form>
+                        <RedeemButton rewardId={r.id} label={`🎁 ${t("child.redeem")}`} />
                       )}
                     </div>
                   </div>

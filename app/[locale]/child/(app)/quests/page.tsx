@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { submitTaskAction } from "../actions";
+import { redirect } from "@/lib/i18n/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,9 @@ export default async function ChildQuests({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const session = (await getChildSession())!;
+  const sessionOrNull = await getChildSession();
+  if (!sessionOrNull) redirect({ href: "/child/select", locale });
+  const session = sessionOrNull!;
   const admin = createAdminClient();
   const todayStr = todayISO();
 

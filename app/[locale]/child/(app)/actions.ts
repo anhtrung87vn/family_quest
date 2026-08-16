@@ -159,13 +159,119 @@ export async function setDreamRewardAction(formData: FormData) {
   revalidatePath("/[locale]/child/rewards", "page");
 }
 
-export async function requestRewardAction(formData: FormData) {
-  const reward_id = z.string().uuid().parse(formData.get("reward_id"));
-  const session = await getChildSession();
-  if (!session) throw new Error("No child session");
-  await requestRedemptionAsChild(reward_id, session.childId);
-  revalidatePath("/[locale]/child/rewards", "page");
-  revalidatePath("/[locale]/child/home", "page");
+export async function requestRewardAction(
+  _prev: { ok: boolean; error?: string } | null,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; needsApproval?: boolean; redemptionId?: string }> {
+  try {
+    const reward_id = z.string().uuid().parse(formData.get("reward_id"));
+    const session = await getChildSession();
+    if (!session) return { ok: false, error: "No child session" };
+
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+
+    console.log("[requestRewardAction] start reward_id=", reward_id, "child=", session.childId);
+
+    // Fetch reward details
+    const { data: reward, error: rewardErr } = await admin
+      .from("rewards")
+      .select("id, family_id, coin_cost, requires_approval, active, stock")
+      .eq("id", reward_id)
+      .single();
+    if (rewardErr || !reward) { console.error("[requestRewardAction] reward fetch error:", rewardErr); return { ok: false, error: "Reward not found" }; }
+    if (!reward.active) return { ok: false, error: "Reward inactive" };
+    if (reward.stock !== null && reward.stock <= 0) return { ok: false, error: "Out of stock" };
+
+    // Check child belongs to same family
+    const { data: child } = await admin.from("children").select("family_id").eq("id", session.childId).single();
+    if (!child || child.family_id !== reward.family_id) return { ok: false, error: "Family mismatch" };
+
+    // Check balance
+    const { coin } = await (await import("@/lib/ledger")).getChildBalance(session.childId);
+    console.log("[requestRewardAction] balance check: coin=", coin, "cost=", reward.coin_cost);
+    if (coin < reward.coin_cost) return { ok: false, error: `Not enough coins (have ${coin}, need ${reward.coin_cost})` };
+
+    const status = reward.requires_approval ? "requested" : "approved";
+
+    const { data: redemption, error: insertErr } = await admin
+      .from("reward_redemptions")
+      .insert({ reward_id, child_id: session.childId, coin_cost: reward.coin_cost, status })
+      .select("id")
+      .single();
+    if (insertErr) { console.error("[requestRewardAction] insert error:", insertErr); return { ok: false, error: insertErr.message }; }
+
+    console.log("[requestRewardAction] redemption inserted id=", redemption?.id, "status=", status);
+
+    // Decrement stock if applicable
+    if (reward.stock !== null) {
+      await admin.from("rewards").update({ stock: reward.stock - 1 }).eq("id", reward_id);
+    }
+
+    // Always deduct coins immediately (hold). If parent rejects, coins are refunded.
+    if (redemption) {
+      await admin.from("coin_transactions").insert({
+        child_id: session.childId,
+        amount: -reward.coin_cost,
+        transaction_type: "REWARD_REDEMPTION",
+        reference_id: redemption.id,
+        description: reward.requires_approval ? "Reward requested (held)" : "Auto-approved redemption",
+      });
+      if (!reward.requires_approval) {
+        await admin.from("reward_redemptions").update({ approved_at: new Date().toISOString() }).eq("id", redemption.id);
+      }
+    }
+
+    revalidatePath("/[locale]/child/(app)/rewards", "page");
+    revalidatePath("/[locale]/child/(app)/home", "page");
+    return { ok: true, needsApproval: reward.requires_approval, redemptionId: redemption?.id };
+  } catch (err: any) {
+    console.error("[requestRewardAction] unexpected error:", err?.message ?? err);
+    return { ok: false, error: err?.message ?? "Unknown error" };
+  }
+}
+
+export async function cancelRedemptionAction(
+  _prev: { ok: boolean; error?: string } | null,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const redemption_id = z.string().uuid().parse(formData.get("redemption_id"));
+    const session = await getChildSession();
+    if (!session) return { ok: false, error: "No child session" };
+
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+
+    const { data: r } = await admin
+      .from("reward_redemptions")
+      .select("child_id, coin_cost, status")
+      .eq("id", redemption_id)
+      .single();
+    if (!r) return { ok: false, error: "Not found" };
+    if (r.child_id !== session.childId) return { ok: false, error: "Not your request" };
+    if (r.status !== "requested") return { ok: false, error: "Already processed" };
+
+    await admin.from("reward_redemptions")
+      .update({ status: "cancelled", approved_at: new Date().toISOString() })
+      .eq("id", redemption_id);
+
+    // Refund coins
+    await admin.from("coin_transactions").insert({
+      child_id: session.childId,
+      amount: r.coin_cost,
+      transaction_type: "MANUAL_ADJUSTMENT",
+      reference_id: redemption_id,
+      description: "Reward request cancelled — refund",
+    });
+
+    revalidatePath("/[locale]/child/(app)/rewards", "page");
+    revalidatePath("/[locale]/child/(app)/home", "page");
+    return { ok: true };
+  } catch (err: any) {
+    console.error("[cancelRedemptionAction] error:", err?.message ?? err);
+    return { ok: false, error: err?.message ?? "Unknown error" };
+  }
 }
 
 export async function claimChoiceQuestAction(formData: FormData) {
@@ -309,6 +415,7 @@ export async function clearAllMessagesAction() {
   const admin = createAdminClient();
   await admin.from("parent_messages").delete().eq("child_id", session.childId);
   revalidatePath("/[locale]/child/(app)/home", "page");
+  revalidatePath("/[locale]/child/(app)/me", "page");
 }
 
 export async function revokeAssignmentAction(formData: FormData) {
@@ -328,6 +435,17 @@ export async function revokeAssignmentAction(formData: FormData) {
     .in("status", ["todo", "rejected"]);
   if (error) throw error;
   revalidatePath("/[locale]/child/(app)/home", "page");
+}
+
+export async function deleteJourneyEntryAction(formData: FormData) {
+  const tx_id = z.string().uuid().parse(formData.get("tx_id"));
+  const session = await getChildSession();
+  if (!session) throw new Error("No child session");
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  await admin.from("coin_transactions").delete().eq("id", tx_id).eq("child_id", session.childId);
+  revalidatePath("/[locale]/child/(app)/me", "page");
 }
 
 export async function refreshPoolAction(formData: FormData) {

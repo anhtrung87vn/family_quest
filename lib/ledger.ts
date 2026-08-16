@@ -99,12 +99,11 @@ export async function rejectTask(completionId: string, note?: string) {
 export async function approveRedemption(redemptionId: string) {
   if (DEV_BYPASS) {
     const db = createAdminClient();
-    const { data: r } = await db.from("reward_redemptions").select("child_id, coin_cost").eq("id", redemptionId).single();
+    const { data: r } = await db.from("reward_redemptions").select("child_id, coin_cost, status").eq("id", redemptionId).single();
     if (!r) throw new Error("redemption not found");
-    const { data: bal } = await db.from("child_balances").select("coin_balance").eq("child_id", r.child_id).single();
-    if ((bal?.coin_balance ?? 0) < r.coin_cost) throw new Error("insufficient balance");
+    if (r.status !== "requested") return; // already approved/rejected/cancelled — no-op
+    // Coins were already deducted at request time — just flip status.
     await db.from("reward_redemptions").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: DEV_USER_ID }).eq("id", redemptionId);
-    await db.from("coin_transactions").insert({ child_id: r.child_id, amount: -r.coin_cost, transaction_type: "REWARD_REDEMPTION", reference_id: redemptionId, description: "Reward redeemed", created_by: DEV_USER_ID });
     return;
   }
   const supabase = await parentClient();
@@ -117,7 +116,12 @@ export async function approveRedemption(redemptionId: string) {
 export async function rejectRedemption(redemptionId: string, note?: string) {
   if (DEV_BYPASS) {
     const db = createAdminClient();
+    const { data: r } = await db.from("reward_redemptions").select("child_id, coin_cost, status").eq("id", redemptionId).single();
+    if (!r) throw new Error("redemption not found");
+    if (r.status !== "requested") return; // already processed — no-op
     await db.from("reward_redemptions").update({ status: "rejected", approved_by: DEV_USER_ID, approved_at: new Date().toISOString() }).eq("id", redemptionId);
+    // Refund coins — they were deducted at request time
+    await db.from("coin_transactions").insert({ child_id: r.child_id, amount: r.coin_cost, transaction_type: "MANUAL_ADJUSTMENT", reference_id: redemptionId, description: "Reward request rejected — refund", created_by: DEV_USER_ID });
     return;
   }
   const supabase = await parentClient();

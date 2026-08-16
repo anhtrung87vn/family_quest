@@ -28,6 +28,8 @@ const schema = z.object({
   requires_approval: z.coerce.boolean().default(true),
   dream_eligible: z.coerce.boolean().default(false),
   stock: z.coerce.number().int().min(0).optional().nullable(),
+  image_url: z.string().url().max(2000).optional().nullable(),
+  link_url: z.string().url().max(2000).optional().nullable(),
 });
 
 export async function createReward(formData: FormData) {
@@ -39,6 +41,8 @@ export async function createReward(formData: FormData) {
     requires_approval: formData.get("requires_approval") === "on",
     dream_eligible: formData.get("dream_eligible") === "on",
     stock: formData.get("stock") ? Number(formData.get("stock")) : null,
+    image_url: (formData.get("image_url") as string)?.trim() || null,
+    link_url: (formData.get("link_url") as string)?.trim() || null,
   });
   const { supabase, familyId } = await requireFamily();
   const { error } = await supabase.from("rewards").insert({
@@ -50,9 +54,71 @@ export async function createReward(formData: FormData) {
     requires_approval: parsed.requires_approval,
     dream_eligible: parsed.dream_eligible,
     stock: parsed.stock,
+    image_url: parsed.image_url,
+    link_url: parsed.link_url,
   });
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");
+}
+
+export async function updateReward(formData: FormData) {
+  const id = z.string().uuid().parse(formData.get("id"));
+  const parsed = schema.parse({
+    name: formData.get("name"),
+    description: formData.get("description") || null,
+    category: formData.get("category") || null,
+    coin_cost: formData.get("coin_cost"),
+    requires_approval: formData.get("requires_approval") === "on",
+    dream_eligible: formData.get("dream_eligible") === "on",
+    stock: formData.get("stock") ? Number(formData.get("stock")) : null,
+    image_url: (formData.get("image_url") as string)?.trim() || null,
+    link_url: (formData.get("link_url") as string)?.trim() || null,
+  });
+  const { supabase } = await requireFamily();
+  const { error } = await supabase.from("rewards").update({
+    name: parsed.name,
+    description: parsed.description,
+    category: parsed.category,
+    coin_cost: parsed.coin_cost,
+    requires_approval: parsed.requires_approval,
+    dream_eligible: parsed.dream_eligible,
+    stock: parsed.stock,
+    image_url: parsed.image_url,
+    link_url: parsed.link_url,
+  }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/[locale]/rewards", "page");
+}
+
+export async function deleteReward(formData: FormData) {
+  const id = z.string().uuid().parse(formData.get("id"));
+  const { supabase } = await requireFamily();
+  const { error } = await supabase.from("rewards").delete().eq("id", id);
+  if (error) throw error;
+  revalidatePath("/[locale]/rewards", "page");
+}
+
+export async function uploadRewardImage(
+  formData: FormData,
+): Promise<{ url: string } | { error: string }> {
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { error: "No file" };
+  if (file.size > 5 * 1024 * 1024) return { error: "File too large (max 5 MB)" };
+  if (!file.type.startsWith("image/")) return { error: "Not an image" };
+
+  const { familyId } = await requireFamily();
+  const admin = createAdminClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${familyId}/${Date.now()}.${ext}`;
+
+  const bytes = await file.arrayBuffer();
+  const { error } = await admin.storage
+    .from("reward-images")
+    .upload(path, bytes, { contentType: file.type, upsert: true });
+  if (error) return { error: error.message };
+
+  const { data } = admin.storage.from("reward-images").getPublicUrl(path);
+  return { url: data.publicUrl };
 }
 
 export async function toggleRewardActive(formData: FormData) {

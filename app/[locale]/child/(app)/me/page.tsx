@@ -5,11 +5,13 @@ import { getChildBalance } from "@/lib/ledger";
 import { getLevelInfo } from "@/lib/levels";
 import { getStreak } from "@/lib/streaks";
 import { levelIcon } from "@/lib/category-style";
-import { signOutChild, markMessagesReadAction, reactToMessageAction, markWeeklyReflectionReadAction } from "../actions";
+import { signOutChild, markMessagesReadAction, reactToMessageAction, markWeeklyReflectionReadAction, clearAllMessagesAction, deleteJourneyEntryAction } from "../actions";
+import { redirect } from "@/lib/i18n/routing";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MessagesSection } from "@/components/ui/MessagesSection";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,9 @@ export default async function ChildMe({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const session = (await getChildSession())!;
+  const sessionOrNull = await getChildSession();
+  if (!sessionOrNull) redirect({ href: "/child/select", locale });
+  const session = sessionOrNull!;
   const admin = createAdminClient();
 
   const [{ coin, star }, { data: txs }, { data: starTxs }, childRow, streak, { data: badges }, { data: child }, { data: nextBadges }, { data: messages }, { data: weeklyRef }] = await Promise.all([
@@ -245,121 +249,71 @@ export default async function ChildMe({
         )}
       </section>
 
-      {/* ✨ Journey (combined coin + star history) */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
-          ✨ {t("child.journey")}
-        </h2>
-        {!journeyGroups.length ? (
-          <Card>
-            <EmptyState
-              icon="✨"
-              title={t("child.emptyHistoryTitle")}
-              description={t("child.emptyHistoryDesc")}
-            />
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {journeyGroups.map((group) => (
-              <div key={group.date}>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-400">
-                  {group.date}
-                </div>
-                <Card>
-                  <ul className="divide-y divide-stone-100">
-                    {group.items.map((tx) => (
-                      <li key={tx.id} className="flex items-center justify-between py-2 text-sm">
-                        <span className="font-medium text-stone-700">{tx.description ?? tx.transaction_type}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          tx.amount >= 0
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-red-100 text-red-700"
-                        }`}>
-                          {tx.amount >= 0 ? "+" : ""}{tx.amount} 🪙
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* 💌 Messages from parents — above journey */}
+      <MessagesSection
+        messages={typedMessages.map((m) => ({ ...m, media_type: null, media_signed_url: null }))}
+        unreadCount={unreadMsgCount}
+        taskNameMap={Object.fromEntries(taskNameMap)}
+        title={t("child.messages")}
+        markReadLabel={t("child.markRead")}
+        markReadAction={markMessagesReadAction}
+        reactAction={reactToMessageAction}
+        unreadIds={typedMessages.filter((m) => !m.read_at).map((m) => m.id).join(",")}
+        clearAllAction={clearAllMessagesAction}
+      />
 
-      {/* 💌 Messages from parents */}
+      {/* ✨ Journey (collapsible coin history with delete) */}
       <section>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
-          💌 {t("child.messages")}
-          {unreadMsgCount > 0 && (
-            <span className="rounded-full bg-pink-500 px-2 py-0.5 text-[11px] font-bold text-white">{unreadMsgCount}</span>
-          )}
-        </h2>
-        {typedMessages.length === 0 ? (
-          <Card>
-            <EmptyState icon="💌" title={t("child.noMessages")} description="" />
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {(() => {
-              // Group by date label
-              const groups: { label: string; msgs: ParentMsg[] }[] = [];
-              for (const msg of typedMessages) {
-                const label = msgDateLabel(msg.created_at);
-                const last = groups[groups.length - 1];
-                if (last?.label === label) last.msgs.push(msg);
-                else groups.push({ label, msgs: [msg] });
-              }
-              return groups.map((group) => (
-                <div key={group.label}>
-                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-400">{group.label}</div>
-                  <div className="space-y-2">
-                    {group.msgs.map((msg) => {
-                      const parentName = "Bố/Mẹ";
-                      const taskName = msg.reference_id ? taskNameMap.get(msg.reference_id) : undefined;
-                      return (
-                        <div key={msg.id} className={`rounded-2xl border p-4 ${msg.read_at ? "border-stone-200 bg-white" : "border-pink-200 bg-pink-50"}`}>
-                          <div className="mb-2 flex items-center gap-1.5">
-                            <span className="text-sm font-semibold text-pink-600">❤️ {parentName}</span>
-                            {!msg.read_at && <span className="h-1.5 w-1.5 rounded-full bg-pink-500" />}
-                            {msg.message_type === "QUEST_APPROVAL" && taskName && (
-                              <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">✅ {taskName}</span>
-                            )}
-                          </div>
-                          <p className="text-sm text-stone-700 leading-relaxed">"{msg.message}"</p>
-                          {!msg.reaction ? (
-                            <div className="mt-2.5 flex gap-2">
-                              {(["❤️", "😊", "🌟"] as const).map((emoji) => (
-                                <form key={emoji} action={reactToMessageAction}>
-                                  <input type="hidden" name="id" value={msg.id} />
-                                  <input type="hidden" name="reaction" value={emoji} />
-                                  <button type="submit" className="rounded-full bg-stone-100 px-3 py-1 text-sm transition-colors hover:bg-pink-100">
-                                    {emoji}
-                                  </button>
-                                </form>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="mt-2 text-xs text-stone-400">Con đã phản hồi {msg.reaction}</div>
-                          )}
-                        </div>
-                      );
-                    })}
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-base font-bold text-stone-800 select-none">
+            <span>✨ {t("child.journey")}</span>
+            <span className="ml-auto text-xs text-stone-400 group-open:hidden">▶</span>
+            <span className="ml-auto hidden text-xs text-stone-400 group-open:inline">▼</span>
+          </summary>
+          <div className="mt-3">
+            {!journeyGroups.length ? (
+              <Card>
+                <EmptyState
+                  icon="✨"
+                  title={t("child.emptyHistoryTitle")}
+                  description={t("child.emptyHistoryDesc")}
+                />
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {journeyGroups.map((group) => (
+                  <div key={group.date}>
+                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-400">
+                      {group.date}
+                    </div>
+                    <Card>
+                      <ul className="divide-y divide-stone-100">
+                        {group.items.map((tx) => (
+                          <li key={tx.id} className="flex items-center gap-2 py-1.5 text-sm">
+                            <span className="flex-1 truncate font-medium text-stone-700">{tx.description ?? tx.transaction_type}</span>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              tx.amount >= 0
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-red-100 text-red-700"
+                            }`}>
+                              {tx.amount >= 0 ? "+" : ""}{tx.amount} 🪙
+                            </span>
+                            <form action={deleteJourneyEntryAction}>
+                              <input type="hidden" name="tx_id" value={tx.id} />
+                              <button type="submit" className="shrink-0 rounded-full p-1 text-[10px] text-stone-300 hover:bg-red-50 hover:text-red-400 transition-colors" title="Xóa">
+                                🗑
+                              </button>
+                            </form>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
                   </div>
-                </div>
-              ));
-            })()}
-            {/* Mark all unread as read */}
-            {unreadMsgCount > 0 && (
-              <form action={markMessagesReadAction}>
-                <input type="hidden" name="ids" value={typedMessages.filter((m) => !m.read_at).map((m) => m.id).join(",")} />
-                <button type="submit" className="text-xs text-pink-400 hover:text-pink-600 transition-colors">
-                  {t("child.markRead")} ✓
-                </button>
-              </form>
+                ))}
+              </div>
             )}
           </div>
-        )}
+        </details>
       </section>
 
       {/* 📖 Weekly Journal — this week's reflection from parents */}

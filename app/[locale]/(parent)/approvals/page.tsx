@@ -292,18 +292,20 @@ export default async function ApprovalsPage({
                           🪙 {r.coin_cost}
                         </span>
                       </div>
-                      <div className="mt-3 flex gap-2">
-                        <form action={approveRedemptionAction}>
+                      <div className="mt-3 space-y-2">
+                        <form action={approveRedemptionAction} className="flex gap-2">
                           <input type="hidden" name="id" value={r.id} />
-                          <Button size="sm" type="submit" className="bg-emerald-500 text-white hover:bg-emerald-600">
+                          <input name="note" placeholder={t("approvals.noteOptional")}
+                            className="h-8 flex-1 rounded-lg border border-stone-300 px-2.5 text-xs" />
+                          <Button size="sm" type="submit" className="h-8 shrink-0 bg-emerald-500 text-white hover:bg-emerald-600">
                             ✅ {t("approvals.approve")}
                           </Button>
                         </form>
                         <form action={rejectRedemptionAction} className="flex gap-2">
                           <input type="hidden" name="id" value={r.id} />
                           <input name="note" placeholder={t("approvals.noteOptional")}
-                            className="h-9 rounded-xl border border-stone-300 px-3 text-sm" />
-                          <Button size="sm" variant="ghost" type="submit" className="text-red-500 hover:text-red-700">
+                            className="h-8 flex-1 rounded-lg border border-stone-300 px-2.5 text-xs" />
+                          <Button size="sm" variant="ghost" type="submit" className="h-8 shrink-0 text-red-500 hover:text-red-700">
                             ❌ {t("approvals.reject")}
                           </Button>
                         </form>

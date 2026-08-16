@@ -135,15 +135,68 @@ export async function rejectCompletion(formData: FormData) {
 
 export async function approveRedemptionAction(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
+  const note = ((formData.get("note") as string) || "").trim();
   await approveRedemption(id);
+
+  // Send a message to the child notifying reward approval
+  const admin = createAdminClient();
+  const { data: redemption } = await admin
+    .from("reward_redemptions")
+    .select("child_id, coin_cost, reward:rewards(name, family_id)")
+    .eq("id", id)
+    .single();
+  if (redemption) {
+    const reward = Array.isArray(redemption.reward) ? redemption.reward[0] : redemption.reward;
+    const { data: child } = await admin.from("children").select("family_id").eq("id", redemption.child_id).single();
+    if (child && reward) {
+      const baseMsg = `🎁 Yêu cầu đổi thưởng "${reward.name}" đã được duyệt! Bạn đã tiêu ${redemption.coin_cost} 🪙. Tận hưởng nhé! 🎉`;
+      const message = note ? `${baseMsg}\n\n💬 ${note}` : baseMsg;
+      await admin.from("parent_messages").insert({
+        family_id: child.family_id,
+        child_id: redemption.child_id,
+        message_type: "GENERAL",
+        message,
+        reference_id: id,
+      });
+    }
+  }
+
   revalidatePath("/[locale]/approvals", "page");
+  revalidatePath("/[locale]/child/(app)/home", "page");
+  revalidatePath("/[locale]/child/(app)/rewards", "page");
 }
 
 export async function rejectRedemptionAction(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const note = (formData.get("note") as string) || undefined;
+
+  // Fetch before rejecting so we can send a message
+  const admin = createAdminClient();
+  const { data: redemption } = await admin
+    .from("reward_redemptions")
+    .select("child_id, coin_cost, reward:rewards(name)")
+    .eq("id", id)
+    .single();
+
   await rejectRedemption(id, note);
+
+  if (redemption) {
+    const reward = Array.isArray(redemption.reward) ? redemption.reward[0] : redemption.reward;
+    const { data: child } = await admin.from("children").select("family_id").eq("id", redemption.child_id).single();
+    if (child && reward) {
+      await admin.from("parent_messages").insert({
+        family_id: child.family_id,
+        child_id: redemption.child_id,
+        message_type: "GENERAL",
+        message: `↩️ Yêu cầu đổi thưởng "${reward.name}" chưa được duyệt lần này. ${note ? `Ba/mẹ nhắn: ${note}` : "Hãy tiếp tục cố gắng nhé! 💪"} Xu đã được trả lại cho con.`,
+        reference_id: id,
+      });
+    }
+  }
+
   revalidatePath("/[locale]/approvals", "page");
+  revalidatePath("/[locale]/child/(app)/home", "page");
+  revalidatePath("/[locale]/child/(app)/rewards", "page");
 }
 
 const ALLOWED_MSG_PHOTO = ["image/jpeg", "image/png", "image/webp"];
