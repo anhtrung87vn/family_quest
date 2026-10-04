@@ -227,7 +227,11 @@
     "statusRejected": "Bị từ chối",
     "statusTodo": "Đang làm",
     "revokeAssignment": "Rút lại nhiệm vụ",
-    "gradeLabel": "Lớp {grade}"
+    "gradeLabel": "Lớp {grade}",
+    "avatarSave": "Lưu",
+    "avatarSaving": "Đang lưu…",
+    "avatarSaved": "Đã cập nhật ảnh",
+    "avatarError": "Không lưu được ảnh. Hãy thử ảnh khác nhé."
   },
   "tasks": {
     "newTask": "Nhiệm vụ mới",
@@ -331,7 +335,11 @@
     "download": "Tải xuống",
     "upload": "Tải lên",
     "deleteAllCount": "{count} nhiệm vụ đang hoạt động sẽ bị vô hiệu hoá.",
-    "restoreCounts": "nhiệm vụ +{tasks}, phần thưởng +{rewards}"
+    "restoreCounts": "nhiệm vụ +{tasks}, phần thưởng +{rewards}",
+    "weeklyStars": "Sao theo tuần",
+    "weeklyStarsHint": "Không có sao mỗi lần làm — làm đều trách nhiệm cả tuần được tới 5 ⭐",
+    "convertToHabit": "Chuyển sang Thói quen (thưởng tạm thời)",
+    "convertToHabitConfirm": "Chuyển trách nhiệm này thành Thói quen? Lúc đầu bé nhận 5 xu + 1 ⭐, giảm dần khi bé đã quen."
   },
   "rewards": {
     "newReward": "Phần thưởng mới",
@@ -613,7 +621,10 @@
     "redeemWaiting": "⏳ Đang chờ ba/mẹ duyệt",
     "redeemCancel": "↩️ Huỷ yêu cầu",
     "redeemDone": "🎉 Đã đổi thành công!",
-    "processing": "⏳ Đang xử lý..."
+    "processing": "⏳ Đang xử lý...",
+    "respWeekHint": "Làm đều trách nhiệm cả tuần để nhận tới {stars} ⭐",
+    "respWeekNeeded": "Trách nhiệm tuần này: {done}/{total} — còn {n} việc nữa để nhận {stars} ⭐",
+    "respWeekTop": "Trách nhiệm tuần này: {done}/{total} — đang đạt {stars} ⭐ 🎉"
   },
   "errors": {
     "generic": "Có lỗi rồi.",

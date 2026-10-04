@@ -4,19 +4,30 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/dev-family", () => ({ DEV_BYPASS: false, DEV_USER_ID: "" }));
 
-import { responsibilityWeekStars, previousWeekRange, MIN_WEEKLY_RESPONSIBILITIES } from "@/lib/responsibility-week";
+import { responsibilityWeekStars, responsibilityWeekProgress, previousWeekRange, MIN_WEEKLY_RESPONSIBILITIES } from "@/lib/responsibility-week";
 
 describe("responsibilityWeekStars", () => {
   it("needs enough responsibilities to judge a week", () => {
     expect(responsibilityWeekStars(MIN_WEEKLY_RESPONSIBILITIES - 1, MIN_WEEKLY_RESPONSIBILITIES - 1)).toBe(0);
   });
 
-  it("gives 2 stars for 90%+ and 1 star for 70%+", () => {
-    expect(responsibilityWeekStars(10, 10)).toBe(2);
-    expect(responsibilityWeekStars(10, 9)).toBe(2);
-    expect(responsibilityWeekStars(10, 8)).toBe(1);
-    expect(responsibilityWeekStars(10, 7)).toBe(1);
+  it("gives 5 stars for 90%+ and 3 stars for 70%+", () => {
+    expect(responsibilityWeekStars(10, 10)).toBe(5);
+    expect(responsibilityWeekStars(10, 9)).toBe(5);
+    expect(responsibilityWeekStars(10, 8)).toBe(3);
+    expect(responsibilityWeekStars(10, 7)).toBe(3);
     expect(responsibilityWeekStars(10, 6)).toBe(0);
+  });
+});
+
+describe("responsibilityWeekProgress", () => {
+  it("tells how many more responsibilities reach the top tier", () => {
+    expect(responsibilityWeekProgress(10, 8)).toEqual({ total: 10, done: 8, stars: 3, neededForTop: 1 });
+    expect(responsibilityWeekProgress(10, 9)).toEqual({ total: 10, done: 9, stars: 5, neededForTop: 0 });
+  });
+
+  it("does not promise stars before the week has enough responsibilities", () => {
+    expect(responsibilityWeekProgress(3, 3)).toEqual({ total: 3, done: 3, stars: 0, neededForTop: 0 });
   });
 });
 

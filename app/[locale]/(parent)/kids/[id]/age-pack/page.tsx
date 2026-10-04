@@ -98,6 +98,9 @@ export default async function AgePackPage({
                         {q.star_reward > 0 && (
                           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">⭐ {q.star_reward}</span>
                         )}
+                        {q.behavior_type === "responsibility" && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700" title={t("tasks.weeklyStarsHint")}>🌱 {t("tasks.weeklyStars")}</span>
+                        )}
                       </label>
                     </li>
                   );

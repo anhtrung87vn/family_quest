@@ -14,12 +14,7 @@ Phase 1 scaffold: parent magic-link auth, children CRUD with avatars + 6-digit P
 
 2. Create a Supabase project → copy keys into `.env.local` (see `.env.example`).
 
-3. Apply migrations in order via the Supabase SQL editor (or `supabase db push` if using the CLI):
-
-   - `supabase/migrations/0001_init.sql`
-   - `supabase/migrations/0002_rls.sql`
-   - `supabase/migrations/0003_storage.sql`
-   - `supabase/migrations/0004_seed.sql` (no-op in Phase 1)
+3. Apply every file in `supabase/migrations/` in numeric order (`0001` → latest) via the Supabase SQL editor (or `supabase db push` if using the CLI). Skip `0007_dev_seed.sql` outside local development — it creates the fixed-UUID dev family used by `DEV_FAMILY_ID`.
 
 4. In Supabase Auth settings, set the site URL to `http://localhost:3000` and add `http://localhost:3000/api/auth/callback` to the redirect allow list.
 

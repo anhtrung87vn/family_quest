@@ -239,6 +239,32 @@ export async function updateBehaviorType(formData: FormData) {
   revalidatePath("/[locale]/(parent)/tasks", "page");
 }
 
+/**
+ * A responsibility the child won't do yet becomes a temporary habit: it pays a
+ * small reward that fades (full → reduced → stars only → graduated), after
+ * which it can return to being a plain responsibility.
+ */
+export async function convertResponsibilityToHabit(formData: FormData) {
+  const id = z.string().uuid().parse(formData.get("id"));
+  const { supabase, familyId } = await requireFamily();
+  await assertTaskInFamily(id, familyId);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ behavior_type: "habit_building", coin_reward: 5, star_reward: 1 })
+    .eq("id", id)
+    .eq("family_id", familyId)
+    .eq("behavior_type", "responsibility");
+  if (error) throw error;
+  // Start the fading ladder from the top for every child.
+  const { error: progErr } = await supabase
+    .from("child_task_reward_progress")
+    .update({ reward_stage: "full_reward", completions: 0 })
+    .eq("task_id", id);
+  if (progErr) throw progErr;
+  revalidatePath("/[locale]/(parent)/tasks", "page");
+  revalidatePath("/[locale]/child/(app)/home", "page");
+}
+
 export async function updateRewardStage(formData: FormData) {
   const child_id = z.string().uuid().parse(formData.get("child_id"));
   const task_id = z.string().uuid().parse(formData.get("task_id"));

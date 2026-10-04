@@ -65,7 +65,8 @@ Storage: `supabase/migrations/0003_storage.sql`.
 - Stars are never spent. `children.lifetime_stars` drives 12 levels (thresholds, titles, gifts, frames and themes in `lib/levels.ts`; top level ≈ 3 years at ~35 stars/week).
 - `rewards.min_level` — reward is still paid in coins but locked until the child reaches that level; enforced in `requestRewardAction`.
 - `child_level_ups(child_id, level, reached_at, gifted_at, gifted_by)` — one row per level reached, created lazily by `syncLevelUps` (child layout, Approvals page). Each level has a privilege gift; parents mark it given on Approvals. Levels reached before 0038 were backfilled as given.
-- `star_transactions.transaction_type = 'RESPONSIBILITY_WEEK'` — 1–2 stars for last week's responsibilities (≥5 assigned, ≥70% / ≥90% done), awarded by the daily cron, unique per child and week.
+- `star_transactions.transaction_type = 'RESPONSIBILITY_WEEK'` — 3 / 5 stars for last week's responsibilities (≥5 assigned, ≥70% / ≥90% done), awarded by the daily cron, unique per child and week. Responsibilities give no stars per completion; the child Home shows the week's progress. A responsibility the child resists can be turned into a temporary habit (`convertResponsibilityToHabit`).
+- Family quest stars are sized to a week of effort (5–25 per child, migration 0040).
 
 ## Post-MVP (not migrated yet)
 

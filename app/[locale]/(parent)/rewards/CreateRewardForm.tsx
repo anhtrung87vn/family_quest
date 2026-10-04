@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { createReward, uploadRewardImage } from "./actions";
 import { CoinIcon } from "@/components/ui/CoinIcon";
+import { compressImage } from "@/lib/compress-image";
 
 interface CreateRewardFormProps {
   labels: {
@@ -47,7 +48,8 @@ function ImagePicker({
     setError(null);
     startUpload(async () => {
       const fd = new FormData();
-      fd.append("file", file);
+      // Phone photos exceed the 1 MB server action limit — compress first.
+      fd.append("file", await compressImage(file));
       const res = await uploadRewardImage(fd);
       if ("error" in res) { setError(res.error); return; }
       onChange(res.url);

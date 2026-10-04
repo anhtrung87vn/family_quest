@@ -20,6 +20,7 @@ import { RepairSection } from "@/components/ui/RepairSection";
 import { CoinIcon } from "@/components/ui/CoinIcon";
 import { TodayEmptyState } from "@/components/ui/KidEmptyState";
 import { familyDayStart, mondayOfISO } from "@/lib/family-time";
+import { responsibilityWeekProgress, MIN_WEEKLY_RESPONSIBILITIES, WEEK_STARS_HIGH } from "@/lib/responsibility-week";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default async function ChildHome({
   let dreamRewardId: string | null = null;
   let streak = { current: 0, longest: 0 };
   let weeklyDone = 0;
+  let respWeek = responsibilityWeekProgress(0, 0);
   let doneToday = 0;
   let dreamReward: { name: string; coin_cost: number } | null = null;
   let fetchError = false;
@@ -101,6 +103,20 @@ export default async function ChildHome({
     if (weekErr) console.error("[ChildHome] weekly completions fetch:", weekErr);
     weeklyDone = weekComps?.length ?? 0;
     doneToday = (weekComps ?? []).filter((c) => new Date(c.submitted_at).getTime() >= todayStart.getTime()).length;
+
+    // Responsibilities due so far this week → progress toward the weekly stars.
+    const { data: respRows, error: respErr } = await admin
+      .from("task_assignments")
+      .select("status, task:tasks!inner(behavior_type)")
+      .eq("child_id", session.childId)
+      .eq("task.behavior_type", "responsibility")
+      .gte("due_date", mondayOfISO(today))
+      .lte("due_date", today);
+    if (respErr) console.error("[ChildHome] weekly responsibilities fetch:", respErr);
+    respWeek = responsibilityWeekProgress(
+      respRows?.length ?? 0,
+      (respRows ?? []).filter((r) => r.status === "approved" || r.status === "submitted").length,
+    );
 
     // --- Recent parent messages ---
     if (familyId) {
@@ -202,6 +218,12 @@ export default async function ChildHome({
   const childAgeVal = ageFromDob(childRowData?.date_of_birth);
   const childAgeTier: "default" | "young" | "middle" | "teen" =
     childAgeVal == null ? "default" : childAgeVal <= 9 ? "young" : childAgeVal <= 12 ? "middle" : "teen";
+  // One line telling the child where this week's responsibilities stand.
+  const respWeekText = respWeek.total < MIN_WEEKLY_RESPONSIBILITIES
+    ? t("child.respWeekHint", { stars: WEEK_STARS_HIGH })
+    : respWeek.neededForTop > 0
+      ? t("child.respWeekNeeded", { done: respWeek.done, total: respWeek.total, n: respWeek.neededForTop, stars: WEEK_STARS_HIGH })
+      : t("child.respWeekTop", { done: respWeek.done, total: respWeek.total, stars: WEEK_STARS_HIGH });
   const isTeen = childAgeTier === "teen";
   const isMiddle = childAgeTier === "middle";
 
@@ -465,9 +487,10 @@ export default async function ChildHome({
           </Collapsible>
         ) : (
           <section>
-            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-emerald-700">
+            <h2 className="flex items-center gap-2 text-base font-bold text-emerald-700">
               🌱 {t("child.responsibilities")}
             </h2>
+            <p className="mb-3 text-[13px] text-emerald-700/80">{respWeekText}</p>
             {responsibilitiesList}
           </section>
         );
@@ -725,6 +748,7 @@ export default async function ChildHome({
         <div className="mt-1.5 text-base font-semibold text-amber-700">
           ✅ {t("child.weeklyDoneCount", { n: weeklyDone })}
         </div>
+        <div className="mt-1 text-sm text-emerald-700">🌱 {respWeekText}</div>
         {streak.current > 0 && (
           <div className="mt-1 text-sm text-stone-600">
             🔥 {streak.current} {t("child.streakDays")}

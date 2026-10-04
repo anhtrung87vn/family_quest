@@ -10,6 +10,7 @@ import { Collapsible } from "@/components/ui/Collapsible";
 import { ageFromDob } from "@/lib/age";
 import { Link } from "@/lib/i18n/routing";
 import { createChild, uploadAvatar, setPin, revokeAssignment, updateChildBirthday } from "./actions";
+import { AvatarUploadForm } from "@/components/ui/AvatarUploadForm";
 import { CoinIcon } from "@/components/ui/CoinIcon";
 
 const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors";
@@ -276,11 +277,11 @@ export default async function KidsPage({
                   </label>
                 </div>
 
-                <form action={uploadAvatar} className={`${PANEL} group-has-[.avatar-toggle:checked]/actions:flex`}>
-                  <input type="hidden" name="child_id" value={c.id} />
-                  <input type="file" name="avatar" accept="image/*" required className="min-w-0 flex-1 text-xs" />
-                  <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
-                </form>
+                <AvatarUploadForm
+                  childId={c.id}
+                  action={uploadAvatar}
+                  className={`${PANEL} group-has-[.avatar-toggle:checked]/actions:flex`}
+                />
 
                 <form action={setPin} className={`${PANEL} group-has-[.pin-toggle:checked]/actions:flex`}>
                   <input type="hidden" name="child_id" value={c.id} />

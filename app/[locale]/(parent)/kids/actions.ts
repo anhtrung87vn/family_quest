@@ -144,15 +144,16 @@ export async function uploadAvatar(formData: FormData) {
     .upload(path, bytes, { contentType: file.type || "image/*", upsert: true });
   if (upErr) throw upErr;
 
-  const { data: signed, error: signErr } = await admin.storage
-    .from("family-avatars")
-    .createSignedUrl(path, 60 * 60 * 24 * 30); // 30 days
-  if (signErr) throw signErr;
-
+  // Store the object path; avatar_url is a stable app route that signs a fresh
+  // URL on every view (signed URLs stored here used to expire after 30 days).
   const { supabase: db } = await resolveContext();
   const { error } = await db
     .from("children")
-    .update({ avatar_url: signed.signedUrl, updated_at: new Date().toISOString() })
+    .update({
+      avatar_path: path,
+      avatar_url: `/api/avatar/${child_id}?v=${Date.now()}`,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", child_id)
     .eq("family_id", familyId);
   if (error) throw error;

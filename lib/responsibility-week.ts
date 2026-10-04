@@ -13,12 +13,26 @@ import { addDaysISO, familyDateISO, mondayOfISO } from "@/lib/family-time";
 /** Fewer assignments than this in a week is not enough to judge consistency. */
 export const MIN_WEEKLY_RESPONSIBILITIES = 5;
 
-export function responsibilityWeekStars(total: number, done: number): 0 | 1 | 2 {
+/** Stars for a week of responsibilities: ≥90% done → 5, ≥70% → 3. */
+export const WEEK_STARS_HIGH = 5;
+export const WEEK_STARS_LOW = 3;
+
+export function responsibilityWeekStars(total: number, done: number): number {
   if (total < MIN_WEEKLY_RESPONSIBILITIES) return 0;
   const ratio = done / total;
-  if (ratio >= 0.9) return 2;
-  if (ratio >= 0.7) return 1;
+  if (ratio >= 0.9) return WEEK_STARS_HIGH;
+  if (ratio >= 0.7) return WEEK_STARS_LOW;
   return 0;
+}
+
+/**
+ * Progress shown to the child during the week: stars currently on track for,
+ * and how many more responsibilities reach the top tier (0 when already there).
+ */
+export function responsibilityWeekProgress(total: number, done: number) {
+  const stars = responsibilityWeekStars(total, done);
+  const neededForTop = total >= MIN_WEEKLY_RESPONSIBILITIES ? Math.max(0, Math.ceil(total * 0.9) - done) : 0;
+  return { total, done, stars, neededForTop };
 }
 
 /** Monday–Sunday (family calendar) of the week before the one containing `today`. */

@@ -227,7 +227,11 @@
     "statusRejected": "Rejected",
     "statusTodo": "In progress",
     "revokeAssignment": "Withdraw task",
-    "gradeLabel": "Grade {grade}"
+    "gradeLabel": "Grade {grade}",
+    "avatarSave": "Save",
+    "avatarSaving": "Saving…",
+    "avatarSaved": "Photo updated",
+    "avatarError": "Couldn't save the photo. Please try another image."
   },
   "tasks": {
     "newTask": "New task",
@@ -331,7 +335,11 @@
     "download": "Download",
     "upload": "Upload",
     "deleteAllCount": "{count, plural, one {# active task} other {# active tasks}} will be disabled.",
-    "restoreCounts": "tasks +{tasks}, rewards +{rewards}"
+    "restoreCounts": "tasks +{tasks}, rewards +{rewards}",
+    "weeklyStars": "Weekly stars",
+    "weeklyStarsHint": "No stars per completion — doing responsibilities consistently all week earns up to 5 ⭐",
+    "convertToHabit": "Turn into a habit (temporary reward)",
+    "convertToHabitConfirm": "Turn this responsibility into a habit? It pays 5 coins + 1 ⭐ at first and fades as the child gets used to it."
   },
   "rewards": {
     "newReward": "New reward",
@@ -613,7 +621,10 @@
     "redeemWaiting": "⏳ Waiting for Mom or Dad",
     "redeemCancel": "↩️ Cancel request",
     "redeemDone": "🎉 Redeemed!",
-    "processing": "⏳ Processing..."
+    "processing": "⏳ Processing...",
+    "respWeekHint": "Do your responsibilities all week to earn up to {stars} ⭐",
+    "respWeekNeeded": "Responsibilities this week: {done}/{total} — {n} more for {stars} ⭐",
+    "respWeekTop": "Responsibilities this week: {done}/{total} — on track for {stars} ⭐ 🎉"
   },
   "errors": {
     "generic": "Something went wrong.",

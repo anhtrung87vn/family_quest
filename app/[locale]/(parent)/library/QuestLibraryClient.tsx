@@ -302,12 +302,22 @@ export function QuestLibraryClient({
 
                         {/* Reward info */}
                         <div className="flex flex-wrap gap-2 text-xs">
-                          <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-                            <CoinIcon /> {tpl.coin_reward}
-                          </span>
-                          <span className="rounded-full bg-purple-50 px-2 py-0.5 font-medium text-purple-700">
-                            ⭐ {tpl.star_reward}
-                          </span>
+                          {tpl.behavior_type === "responsibility" ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700" title={t("tasks.weeklyStarsHint")}>
+                              🌱 {t("tasks.weeklyStars")}
+                            </span>
+                          ) : (
+                            <>
+                              {tpl.coin_reward > 0 && (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                                  <CoinIcon /> {tpl.coin_reward}
+                                </span>
+                              )}
+                              <span className="rounded-full bg-purple-50 px-2 py-0.5 font-medium text-purple-700">
+                                ⭐ {tpl.star_reward}
+                              </span>
+                            </>
+                          )}
                           {tpl.estimated_minutes && (
                             <span className="rounded-full bg-stone-100 px-2 py-0.5 font-medium text-stone-500">
                               ⏱ {tpl.estimated_minutes}m

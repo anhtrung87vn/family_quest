@@ -8,7 +8,7 @@ import { isAgeEligible } from "@/lib/age";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { toggleTaskActive, toggleTaskPool, assignTask, deleteTask, updateTask, disableOutOfAgeTasks } from "./actions";
+import { toggleTaskActive, toggleTaskPool, assignTask, deleteTask, updateTask, disableOutOfAgeTasks, convertResponsibilityToHabit } from "./actions";
 import { CoinIcon } from "@/components/ui/CoinIcon";
 
 type Task = {
@@ -128,6 +128,11 @@ function TaskCard({ task, childList, labels }: { task: Task; childList: Child[];
             {task.star_reward > 0 && (
               <span className={`${CHIP} bg-purple-100 font-semibold text-purple-700`}>⭐ {task.star_reward}</span>
             )}
+            {task.behavior_type === "responsibility" && (
+              <span className={`${CHIP} bg-emerald-100 font-semibold text-emerald-700`} title={t("tasks.weeklyStarsHint")}>
+                🌱 {t("tasks.weeklyStars")}
+              </span>
+            )}
             {rule && <span className={`${CHIP} bg-stone-100 text-stone-600`}>🔄 {recurrenceLabel(rule, t, locale)}</span>}
             {task.category && (
               <span className={`${CHIP} ${style.bg} font-medium ${style.color}`}>
@@ -171,6 +176,22 @@ function TaskCard({ task, childList, labels }: { task: Task; childList: Child[];
               ✨
             </button>
           </form>
+          {task.behavior_type === "responsibility" && (
+            <form
+              action={convertResponsibilityToHabit}
+              onSubmit={(e) => { if (!window.confirm(t("tasks.convertToHabitConfirm"))) e.preventDefault(); }}
+            >
+              <input type="hidden" name="id" value={task.id} />
+              <button
+                type="submit"
+                title={t("tasks.convertToHabit")}
+                aria-label={t("tasks.convertToHabit")}
+                className={`${ACTION_BTN} text-emerald-600 hover:text-emerald-800`}
+              >
+                🌿
+              </button>
+            </form>
+          )}
           <button
             type="button"
             title={t("tasks.editTask")}
