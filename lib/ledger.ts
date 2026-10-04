@@ -182,3 +182,47 @@ export async function getChildBalance(childId: string): Promise<{ coin: number; 
   }
   return { coin: data?.coin_balance ?? 0, star: data?.star_balance ?? 0 };
 }
+
+/** Ledger rows owed to each child who contributed to a completed family quest. */
+export function familyQuestAwards(
+  members: { child_id: string; contributions: number }[],
+  coinReward: number,
+  starReward: number,
+) {
+  const childIds = [...new Set(members.filter((m) => m.contributions > 0).map((m) => m.child_id))];
+  return {
+    coins: coinReward > 0 ? childIds.map((child_id) => ({ child_id, amount: coinReward })) : [],
+    stars: starReward > 0 ? childIds.map((child_id) => ({ child_id, amount: starReward })) : [],
+  };
+}
+
+/**
+ * Pay a completed family quest: every contributing child receives the quest's
+ * coin_reward and star_reward (both are per child). Callers must only invoke
+ * this once, on the active → completed transition.
+ */
+export async function awardFamilyQuest(questId: string, userId: string | null) {
+  const db = createAdminClient();
+  const [{ data: quest, error: qErr }, { data: members, error: mErr }] = await Promise.all([
+    db.from("family_quests").select("title, coin_reward, star_reward").eq("id", questId).single(),
+    db.from("family_quest_members").select("child_id, contributions").eq("quest_id", questId),
+  ]);
+  if (qErr) throw qErr;
+  if (mErr) throw mErr;
+  const { coins, stars } = familyQuestAwards(members ?? [], quest.coin_reward ?? 0, quest.star_reward ?? 0);
+  const base = { transaction_type: "FAMILY_QUEST", reference_id: questId, description: `Family quest: ${quest.title}`, created_by: userId };
+
+  if (coins.length) {
+    const { error } = await db.from("coin_transactions").insert(coins.map((c) => ({ ...c, ...base })));
+    if (error) throw error;
+  }
+  if (stars.length) {
+    const { error } = await db.from("star_transactions").insert(stars.map((s) => ({ ...s, ...base })));
+    if (error) throw error;
+    for (const s of stars) {
+      const { data: child } = await db.from("children").select("lifetime_stars").eq("id", s.child_id).single();
+      await db.from("children").update({ lifetime_stars: (child?.lifetime_stars ?? 0) + s.amount }).eq("id", s.child_id);
+    }
+  }
+  return { childrenRewarded: coins.length || stars.length };
+}

@@ -7,23 +7,20 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Collapsible } from "@/components/ui/Collapsible";
+import { ageFromDob } from "@/lib/age";
+import { Link } from "@/lib/i18n/routing";
 import { createChild, uploadAvatar, setPin, revokeAssignment, updateChildBirthday } from "./actions";
-
-function computeAge(dob: string): number {
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
 
 export default async function KidsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ sent?: string }>;
 }) {
   const { locale } = await params;
+  const { sent } = await searchParams;
+  const [sentTasks, sentAssignments, sentRewards] = (sent ?? "").split(".").map(Number);
   setRequestLocale(locale);
   const t = await getTranslations();
   const { familyId, supabase } = await resolveContext();
@@ -64,6 +61,12 @@ export default async function KidsPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-stone-800">👧 {t("parent.kids")}</h1>
       </div>
+
+      {sent && !Number.isNaN(sentRewards) && (
+        <Card className="border-emerald-200 bg-emerald-50 text-sm text-emerald-700">
+          🎁 {t("kids.agePackSent", { tasks: sentTasks, assignments: sentAssignments, rewards: sentRewards })}
+        </Card>
+      )}
 
       {/* Add child — collapsible */}
       <Card>
@@ -121,7 +124,7 @@ export default async function KidsPage({
           const level = getLevelInfo(c.lifetime_stars ?? 0);
           const levelTitle = locale === "vi" ? level.title_vi : level.title_en;
           const lvIcon = levelIcon(level.level);
-          const childAge = c.date_of_birth ? computeAge(c.date_of_birth) : null;
+          const childAge = ageFromDob(c.date_of_birth);
           return (
             <Card key={c.id} className="space-y-4">
               {/* Header */}
@@ -240,6 +243,12 @@ export default async function KidsPage({
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+                <Link
+                  href={`/kids/${c.id}/age-pack`}
+                  className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-200"
+                >
+                  🎁 {t("kids.agePack")}
+                </Link>
                 <Collapsible
                   trigger={
                     <span className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200">

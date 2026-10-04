@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { todayISO } from "@/lib/recurrence";
 import { resolveContext } from "@/lib/dev-family";
 import { assertChildInFamily, assertTaskInFamily } from "@/lib/authz";
+import { REWARD_TEMPLATE_COLUMNS, toFamilyReward } from "@/lib/age-provisioning";
 
 const requireFamily = resolveContext;
 
@@ -184,7 +185,8 @@ export async function cloneSystemTemplates() {
   const { data: tplTasks } = await admin
     .from("tasks")
     .select("name, name_vi, description, description_vi, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, responsibility_policy, availability_type, evidence_type, evidence_required, max_audio_seconds, skill_domain, skill_subdomain, min_age, recommended_age, max_age, independence_level, estimated_minutes, recommended_frequency, requires_supervision, development_goal, development_goal_vi, parent_tip, parent_tip_vi, template_key, skill_ladder_key, skill_ladder_level")
-    .eq("is_system_template", true);
+    .eq("is_system_template", true)
+    .eq("active", true);
   if (tplTasks?.length) {
     // Skip names that already exist as active tasks; allow re-cloning soft-deleted ones
     const { data: existingTasks } = await supabase.from("tasks").select("name").eq("family_id", familyId).eq("active", true);
@@ -205,19 +207,16 @@ export async function cloneSystemTemplates() {
   // Clone system reward templates
   const { data: tplRewards } = await admin
     .from("rewards")
-    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
-    .eq("is_system_template", true);
+    .select(REWARD_TEMPLATE_COLUMNS)
+    .eq("is_system_template", true)
+    .eq("active", true);
   if (tplRewards?.length) {
     // Only skip templates whose name already exists as an ACTIVE reward (soft-deleted rows don't count)
     const { data: existingRewards } = await supabase.from("rewards").select("name").eq("family_id", familyId).eq("active", true);
     const existingRewardNames = new Set((existingRewards ?? []).map((r) => r.name));
     const rows = tplRewards
       .filter((r) => !existingRewardNames.has(r.name))
-      .map((r) => ({
-        ...r,
-        family_id: familyId,
-        is_system_template: false,
-      }));
+      .map((r) => toFamilyReward(r, familyId));
     if (rows.length) await supabase.from("rewards").insert(rows);
   }
 
@@ -297,7 +296,8 @@ export async function resetAndRecloneTasks() {
   const { data: tplTasks, error: fetchErr } = await admin
     .from("tasks")
     .select("name, name_vi, description, description_vi, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, availability_type, evidence_type, evidence_required, max_audio_seconds, skill_domain, skill_subdomain, min_age, recommended_age, max_age, independence_level, estimated_minutes, recommended_frequency, requires_supervision, development_goal, development_goal_vi, parent_tip, parent_tip_vi, template_key, skill_ladder_key, skill_ladder_level")
-    .eq("is_system_template", true);
+    .eq("is_system_template", true)
+    .eq("active", true);
   if (fetchErr) throw fetchErr;
   if (!tplTasks?.length) return;
 

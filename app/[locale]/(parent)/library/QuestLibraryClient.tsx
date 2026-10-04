@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { domainStyle, independenceStyle, ALL_SKILL_DOMAINS } from "@/lib/category-style";
 import type { SkillDomain } from "@/lib/category-style";
+import { ageFromDob } from "@/lib/age";
 import { copyTemplateToFamily } from "./actions";
 
 interface Template {
@@ -43,15 +44,6 @@ interface Child {
   date_of_birth: string | null;
 }
 
-function computeAge(dob: string): number {
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
-
 const BEHAVIOR_ICONS: Record<string, string> = {
   responsibility: "🌱",
   habit_building: "🌿",
@@ -87,9 +79,7 @@ export function QuestLibraryClient({
 
   // Compute selected child's age
   const selectedChildObj = children.find((c) => c.id === selectedChild);
-  const childAge = selectedChildObj?.date_of_birth
-    ? computeAge(selectedChildObj.date_of_birth)
-    : null;
+  const childAge = ageFromDob(selectedChildObj?.date_of_birth);
 
   // Filter templates
   const filtered = useMemo(() => {
@@ -168,7 +158,7 @@ export function QuestLibraryClient({
               {t("common.all")}
             </button>
             {children.map((c) => {
-              const age = c.date_of_birth ? computeAge(c.date_of_birth) : null;
+              const age = ageFromDob(c.date_of_birth);
               return (
                 <button
                   key={c.id}

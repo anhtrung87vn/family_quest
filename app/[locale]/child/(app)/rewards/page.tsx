@@ -11,6 +11,7 @@ import { setDreamRewardAction } from "../actions";
 import { RedeemButton } from "@/components/ui/RedeemButton";
 import { CookieToast } from "@/components/ui/CookieToast";
 import { redirect } from "@/lib/i18n/routing";
+import { ageFromDob, isAgeEligible } from "@/lib/age";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,9 @@ export default async function ChildRewards({
   const session = sessionOrNull!;
   const admin = createAdminClient();
 
-  const [{ data: rewards }, { data: redemptions }, { coin }, { data: childRow }] = await Promise.all([
+  const [{ data: allRewards }, { data: redemptions }, { coin }, { data: childRow }] = await Promise.all([
     admin.from("rewards")
-      .select("id, name, name_vi, description, description_vi, coin_cost, category, dream_eligible, stock, image_url, link_url")
+      .select("id, name, name_vi, description, description_vi, coin_cost, category, dream_eligible, stock, image_url, link_url, min_age, max_age")
       .eq("family_id", session.familyId)
       .eq("active", true)
       .order("coin_cost"),
@@ -40,10 +41,14 @@ export default async function ChildRewards({
       .limit(30),
     getChildBalance(session.childId),
     admin.from("children")
-      .select("current_dream_reward_id")
+      .select("current_dream_reward_id, date_of_birth")
       .eq("id", session.childId)
       .single(),
   ]);
+
+  // Only show rewards whose age range fits this child (no birthday → all).
+  const childAge = ageFromDob(childRow?.date_of_birth);
+  const rewards = (allRewards ?? []).filter((r) => isAgeEligible(r, childAge));
 
   // Helper: pick localized reward name
   const localRewardName = (r: any): string =>

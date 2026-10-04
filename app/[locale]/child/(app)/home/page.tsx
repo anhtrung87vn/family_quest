@@ -18,6 +18,7 @@ import { ChildGuide } from "@/components/ui/ChildGuide";
 import { SwipeToRevoke } from "@/components/ui/SwipeToRevoke";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { rankTemplates, poolSizeForAge } from "@/lib/recommendations";
+import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { RepairSection } from "@/components/ui/RepairSection";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function ChildHome({
   const admin = createAdminClient();
   const today = todayISO();
 
-  type PoolTask = { id: string; name: string; name_vi?: string | null; description?: string | null; description_vi?: string | null; category: string | null; coin_reward: number; star_reward: number; requires_approval: boolean; behavior_type?: string };
+  type PoolTask = { id: string; name: string; name_vi?: string | null; description?: string | null; description_vi?: string | null; category: string | null; coin_reward: number; star_reward: number; requires_approval: boolean; behavior_type?: string; min_age?: number | null; max_age?: number | null };
   type ClaimedPoolQuest = { id: string; status: string; task: PoolTask | null };
   type TaskWithBehavior = { id: string; name: string; category: string | null; coin_reward: number; star_reward: number; behavior_type?: string };
 
@@ -145,15 +146,7 @@ export default async function ChildHome({
     // --- Quest Pool (age-aware ranking when child has date_of_birth) ---
     if (familyId) {
       // Reuse date_of_birth from initial childRow query (no extra DB call)
-      const childDateOfBirth = childRowData?.date_of_birth ?? null;
-      let childAge: number | null = null;
-      if (childDateOfBirth) {
-        const birth = new Date(childDateOfBirth);
-        const now = new Date();
-        childAge = now.getFullYear() - birth.getFullYear();
-        const m = now.getMonth() - birth.getMonth();
-        if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) childAge--;
-      }
+      const childAge = ageFromDob(childRowData?.date_of_birth);
 
       const [cfgRes, claimsRes, refreshRes, poolRes] = await Promise.all([
         admin.from("child_pool_config").select("max_claims_per_day, pool_size").eq("child_id", session.childId).maybeSingle(),
@@ -175,9 +168,9 @@ export default async function ChildHome({
       const claimedAssignmentIds = (claimsRes.data ?? []).map((c) => c.assignment_id);
       claimsToday = claimedTaskIds.size;
 
-      // Pool tasks: filter out claimed, then rank by age if available
+      // Pool tasks: drop claimed and out-of-age quests, then rank by age if available
       const allPool: PoolTask[] = (poolRes.data ?? []) as PoolTask[];
-      const unclaimed = allPool.filter((t) => !claimedTaskIds.has(t.id));
+      const unclaimed = allPool.filter((t) => !claimedTaskIds.has(t.id) && isAgeEligible(t, childAge));
 
       if (childAge != null && unclaimed.length > displaySize) {
         // Fetch recent completions for ranking (last 14 days)
@@ -261,19 +254,9 @@ export default async function ChildHome({
   const lvIcon = levelIcon(level.level);
 
   // Derive age tier for UX adaptation — reuse date_of_birth from initial childRow query
-  let childAgeTier: "default" | "young" | "middle" | "teen" = "default";
-  let childAgeVal: number | null = null;
-  {
-    const dob = childRowData?.date_of_birth ?? undefined;
-    if (dob) {
-      const birth = new Date(dob);
-      const now = new Date();
-      childAgeVal = now.getFullYear() - birth.getFullYear();
-      const m = now.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) childAgeVal--;
-      childAgeTier = childAgeVal <= 9 ? "young" : childAgeVal <= 12 ? "middle" : "teen";
-    }
-  }
+  const childAgeVal = ageFromDob(childRowData?.date_of_birth);
+  const childAgeTier: "default" | "young" | "middle" | "teen" =
+    childAgeVal == null ? "default" : childAgeVal <= 9 ? "young" : childAgeVal <= 12 ? "middle" : "teen";
   const isTeen = childAgeTier === "teen";
   const isMiddle = childAgeTier === "middle";
 

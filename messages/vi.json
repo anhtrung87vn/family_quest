@@ -200,7 +200,21 @@
     "age": "Tuổi {age}",
     "created": "Đã thêm bé.",
     "pinSet": "Đã lưu PIN.",
-    "pinInvalid": "PIN phải 6 chữ số."
+    "pinInvalid": "PIN phải 6 chữ số.",
+    "agePack": "Gửi theo tuổi",
+    "agePackTitle": "Nhiệm vụ & phần thưởng cho {name} · {age} tuổi",
+    "agePackIntro": "Gợi ý dựa trên ngày sinh của {name}. Bỏ chọn mục không muốn rồi bấm gửi.",
+    "agePackNeedsBirthday": "Hãy nhập ngày sinh của {name} trước để chọn nhiệm vụ và phần thưởng đúng độ tuổi.",
+    "agePackPool": "Nhiệm vụ tự chọn (Pool)",
+    "agePackPoolHint": "Thêm vào pool của gia đình — {name} tự chọn mỗi ngày.",
+    "agePackCore": "Trách nhiệm & thói quen hằng ngày",
+    "agePackCoreHint": "Giao cho {name} và tự lặp lại theo lịch.",
+    "agePackRewards": "Phần thưởng",
+    "agePackRewardsHint": "Thêm vào cửa hàng phần thưởng cho bé ở độ tuổi này.",
+    "agePackEmpty": "Không có gì mới để gửi — mọi thứ cho độ tuổi này đã có trong gia đình.",
+    "agePackSend": "Gửi cho {name}",
+    "agePackSent": "Đã gửi: {tasks} nhiệm vụ, {assignments} lượt giao, {rewards} phần thưởng.",
+    "agePackPrice": "≈ {price}đ"
   },
   "tasks": {
     "newTask": "Nhiệm vụ mới",

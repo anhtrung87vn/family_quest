@@ -3,6 +3,7 @@
 import "@/lib/dev-tls-patch";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { REWARD_TEMPLATE_COLUMNS, toFamilyReward } from "@/lib/age-provisioning";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveContext } from "@/lib/dev-family";
 
@@ -129,8 +130,10 @@ export async function cloneRewardTemplates() {
   const admin = createAdminClient();
   const { data: templates, error: fetchErr } = await admin
     .from("rewards")
-    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
-    .eq("family_id", "00000000-0000-0000-0000-000000000000");
+    .select(REWARD_TEMPLATE_COLUMNS)
+    .eq("family_id", "00000000-0000-0000-0000-000000000000")
+    .eq("is_system_template", true)
+    .eq("active", true);
   if (fetchErr) throw fetchErr;
   if (!templates?.length) return;
 
@@ -143,7 +146,7 @@ export async function cloneRewardTemplates() {
 
   const toInsert = templates
     .filter((t) => !existingNames.has(t.name))
-    .map((t) => ({ ...t, family_id: familyId, active: true }));
+    .map((t) => toFamilyReward(t, familyId));
 
   if (toInsert.length > 0) {
     const { error: insertErr } = await supabase.from("rewards").insert(toInsert);
@@ -170,13 +173,14 @@ export async function resetAndRecloneRewards() {
   // Fetch all system templates including name_vi / description_vi
   const { data: templates, error: fetchErr } = await admin
     .from("rewards")
-    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
+    .select(REWARD_TEMPLATE_COLUMNS)
     .eq("family_id", "00000000-0000-0000-0000-000000000000")
-    .eq("is_system_template", true);
+    .eq("is_system_template", true)
+    .eq("active", true);
   if (fetchErr) throw fetchErr;
   if (!templates?.length) return;
 
-  const rows = templates.map((t) => ({ ...t, family_id: familyId, active: true, is_system_template: false }));
+  const rows = templates.map((t) => toFamilyReward(t, familyId));
   const { error: insertErr } = await supabase.from("rewards").insert(rows);
   if (insertErr) throw insertErr;
 

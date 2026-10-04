@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hashPin } from "@/lib/auth/pin";
 import { resolveContext } from "@/lib/dev-family";
 import { assertAssignmentInFamily, assertChildInFamily } from "@/lib/authz";
+import { autoProvisionNewChild, provisionForChild } from "@/lib/age-provisioning";
+import { redirect } from "@/lib/i18n/routing";
 
 const createSchema = z.object({
   name: z.string().min(1).max(40),
@@ -24,20 +26,70 @@ export async function createChild(formData: FormData) {
     pin: formData.get("pin"),
     date_of_birth: formData.get("date_of_birth") || null,
   });
-  const { familyId, supabase: db } = await resolveContext();
+  const { familyId, userId, supabase: db } = await resolveContext();
   const pin_hash = await hashPin(parsed.pin);
 
-  const { error } = await db.from("children").insert({
+  const { data: child, error } = await db.from("children").insert({
     family_id: familyId,
     name: parsed.name,
     grade: parsed.grade,
     preferred_language: parsed.preferred_language,
     pin_hash,
     date_of_birth: parsed.date_of_birth,
-  });
+  }).select("id").single();
   if (error) throw error;
+
+  // With a birthday we know the age: stock the pool and reward shop with
+  // age-matched templates. Non-critical — the child is already created.
+  if (parsed.date_of_birth && child) {
+    try {
+      await autoProvisionNewChild(child.id, familyId, userId);
+    } catch (err) {
+      console.error("[createChild] auto-provision failed", err);
+    }
+  }
   revalidatePath("/[locale]/kids", "page");
   revalidatePath("/[locale]/dashboard", "page");
+  revalidatePath("/[locale]/(parent)/tasks", "page");
+  revalidatePath("/[locale]/(parent)/rewards", "page");
+}
+
+export async function sendAgePack(formData: FormData) {
+  const schema = z.object({
+    locale: z.enum(["en", "vi"]),
+    child_id: z.string().uuid(),
+    task_template_ids: z.array(z.string().uuid()).max(100),
+    reward_template_ids: z.array(z.string().uuid()).max(100),
+  });
+  const parsed = schema.parse({
+    locale: formData.get("locale"),
+    child_id: formData.get("child_id"),
+    task_template_ids: formData.getAll("task_template_ids"),
+    reward_template_ids: formData.getAll("reward_template_ids"),
+  });
+  const { familyId, userId } = await resolveContext();
+  await assertChildInFamily(parsed.child_id, familyId);
+
+  const result = await provisionForChild({
+    childId: parsed.child_id,
+    familyId,
+    userId,
+    taskTemplateIds: parsed.task_template_ids,
+    rewardTemplateIds: parsed.reward_template_ids,
+  });
+
+  revalidatePath("/[locale]/(parent)/kids", "page");
+  revalidatePath("/[locale]/(parent)/tasks", "page");
+  revalidatePath("/[locale]/(parent)/rewards", "page");
+  revalidatePath("/[locale]/child/(app)/home", "page");
+  revalidatePath("/[locale]/child/(app)/rewards", "page");
+  redirect({
+    href: {
+      pathname: "/kids",
+      query: { sent: `${result.tasksAdded}.${result.assignmentsAdded}.${result.rewardsAdded}` },
+    },
+    locale: parsed.locale,
+  });
 }
 
 export async function setPin(formData: FormData) {

@@ -100,10 +100,10 @@ function daysSince(dateStr: string): number {
  *   -15  completed within last 7 days
  *   -999 already an active task (filtered out)
  */
-export function rankTemplates(
-  templates: TemplateRow[],
+export function rankTemplates<T extends TemplateRow>(
+  templates: T[],
   options: Options
-): RankedTemplate[] {
+): (T & RankedTemplate)[] {
   const { childAge, recentCompletions, activeTaskNames, limit = 20 } = options;
   const domainMap = domainCounts(recentCompletions);
   const recentNames = recentTaskNames(recentCompletions);
@@ -118,7 +118,7 @@ export function rankTemplates(
     }
   }
 
-  const ranked: RankedTemplate[] = [];
+  const ranked: (T & RankedTemplate)[] = [];
 
   for (const tpl of templates) {
     // Hard filter: skip if already active in family

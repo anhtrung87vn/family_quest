@@ -49,6 +49,18 @@ Storage: `supabase/migrations/0003_storage.sql`.
 - `family_memories` — permanent storage for promoted evidence: `title`, `caption`, `media_type`, `media_storage_path`, `memory_date`, `source_type`, `source_id`, soft-delete via `deleted_at`.
 - Storage bucket `family-memories` — private, permanent, no auto-expiration, RLS family-scoped.
 
+## Age-based economy (0035–0036)
+
+- `rewards.min_age` / `recommended_age` / `max_age` — same age contract as `tasks`. The child reward shop and Quest Pool only show items whose range includes the child's age (from `children.date_of_birth`; no birthday → everything). Helpers: `lib/age.ts`.
+- `rewards.reference_price_vnd` — real-world price a template's `coin_cost` is derived from. **1 coin ≈ 1,000đ**; family experiences are priced at one child's share (family cost ÷ 4); privileges have no price and are valued in coins directly.
+- `rewards.template_key` (system, unique) / `source_template_key` (family copies) — mirror the `tasks` columns.
+- Quest `coin_reward` is derived from effort (minutes, frequency, habit fading), calibrated to ~100 coins/week at age 8 and ~150 at age 11. Responsibilities and character quests stay at 0 coins.
+- Templates cover ages 6–17 evenly (15–19 quests recommended per age, 28–41 eligible rewards per age).
+- "Send by age" (`/kids/[id]/age-pack`) and child creation with a birthday copy age-matched templates into the family via `lib/age-provisioning.ts`.
+- Existing family copies are updated only by the opt-in `supabase/scripts/sync-family-copies-with-templates.sql`, which skips values a parent has edited.
+- 0037: cinema and theme-park rewards are split by ticket type — the base row (ages 6–10) uses the child ticket, the `(11+)` row the adult ticket (VN venues price children by height, ~1.3–1.4m). Kindness quests and household-routine family quests cloned before 0034 are reset to 0 coins.
+- Family quests pay `coin_reward` and `star_reward` to **each contributing child** when the quest completes (`FAMILY_QUEST` ledger rows, `awardFamilyQuest` in `lib/ledger.ts`), once, on the active → completed transition.
+
 ## Post-MVP (not migrated yet)
 
 `badges`, `child_badges`, `family_quests`, `family_quest_members`, `weekly_challenges`, `collections`, `child_collection_items`.

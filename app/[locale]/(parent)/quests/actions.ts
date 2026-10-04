@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveContext } from "@/lib/dev-family";
 import { assertChildInFamily, assertQuestInFamily } from "@/lib/authz";
+import { awardFamilyQuest } from "@/lib/ledger";
 
 const requireFamily = resolveContext;
 
@@ -39,7 +40,7 @@ export async function createFamilyQuest(formData: FormData) {
 export async function contributeToQuest(formData: FormData) {
   const quest_id = z.string().uuid().parse(formData.get("quest_id"));
   const child_id = z.string().uuid().parse(formData.get("child_id"));
-  const { supabase, familyId } = await requireFamily();
+  const { supabase, familyId, userId } = await requireFamily();
 
   await Promise.all([
     assertQuestInFamily(quest_id, familyId),
@@ -70,15 +71,23 @@ export async function contributeToQuest(formData: FormData) {
   if (quest) {
     const newCount = quest.current_count + 1;
     const updates: Record<string, unknown> = { current_count: newCount };
-    if (newCount >= quest.target_count) {
+    const completing = newCount >= quest.target_count;
+    if (completing) {
       updates.status = "completed";
       updates.completed_at = new Date().toISOString();
     }
-    await supabase.from("family_quests").update(updates).eq("id", quest_id).eq("family_id", familyId);
+    // Only the request that moves the quest out of "active" pays the reward,
+    // so a double-click or a late contribution never pays twice.
+    const { data: changed, error } = await supabase.from("family_quests").update(updates)
+      .eq("id", quest_id).eq("family_id", familyId).eq("status", "active").select("id");
+    if (error) throw error;
+    if (completing && changed?.length) await awardFamilyQuest(quest_id, userId);
   }
 
   revalidatePath("/[locale]/quests", "page");
   revalidatePath("/[locale]/dashboard", "page");
+  revalidatePath("/[locale]/kids", "page");
+  revalidatePath("/[locale]/child/(app)/me", "page");
 }
 
 export async function cancelQuest(formData: FormData) {

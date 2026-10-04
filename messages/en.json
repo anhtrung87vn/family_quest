@@ -200,7 +200,21 @@
     "age": "Age {age}",
     "created": "Child added.",
     "pinSet": "PIN saved.",
-    "pinInvalid": "PIN must be 6 digits."
+    "pinInvalid": "PIN must be 6 digits.",
+    "agePack": "Send by age",
+    "agePackTitle": "Quests & rewards for {name} · age {age}",
+    "agePackIntro": "Suggestions are based on {name}'s birthday. Untick anything you don't want, then send.",
+    "agePackNeedsBirthday": "Set {name}'s birthday first so we can match quests and rewards to their age.",
+    "agePackPool": "Choice Pool quests",
+    "agePackPoolHint": "Added to the family pool — {name} picks from them each day.",
+    "agePackCore": "Daily responsibilities & habits",
+    "agePackCoreHint": "Assigned to {name} and repeated on their usual schedule.",
+    "agePackRewards": "Rewards",
+    "agePackRewardsHint": "Added to the reward shop for children of this age.",
+    "agePackEmpty": "Nothing new to send — everything for this age is already in your family.",
+    "agePackSend": "Send to {name}",
+    "agePackSent": "Sent: {tasks} quests, {assignments} assignments, {rewards} rewards.",
+    "agePackPrice": "≈ {price}đ"
   },
   "tasks": {
     "newTask": "New task",

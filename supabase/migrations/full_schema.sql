@@ -180,9 +180,18 @@ create table if not exists rewards (
   active boolean not null default true,
   stock integer,
   created_at timestamptz not null default now(),
-  link_url text
+  link_url text,
+  min_age integer check (min_age between 4 and 21),
+  recommended_age integer check (recommended_age between 4 and 21),
+  max_age integer check (max_age between 4 and 21),
+  reference_price_vnd integer check (reference_price_vnd >= 0),
+  template_key text,
+  source_template_key text
 );
 create index if not exists rewards_family_id_idx on rewards(family_id);
+create unique index if not exists rewards_template_key_uniq
+  on rewards(template_key)
+  where template_key is not null and is_system_template = true;
 
 create table if not exists reward_redemptions (
   id uuid primary key default gen_random_uuid(),
