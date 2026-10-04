@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveContext } from "@/lib/dev-family";
 import { assertChildInFamily } from "@/lib/authz";
+import { addDaysISO, familyDayStart } from "@/lib/family-time";
 
 const requireFamily = resolveContext;
 
@@ -31,29 +32,29 @@ export async function saveReflection(formData: FormData) {
   await assertChildInFamily(parsed.child_id, familyId);
 
   // Compute weekly stats
-  const weekEnd = new Date(parsed.week_start);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const endStr = weekEnd.toISOString().slice(0, 10);
+  // The week is Monday 00:00 → next Monday 00:00 on the family calendar.
+  const weekFrom = familyDayStart(parsed.week_start).toISOString();
+  const weekTo = familyDayStart(addDaysISO(parsed.week_start, 7)).toISOString();
 
   const [tasksResult, coinsResult, starsResult] = await Promise.all([
     supabase.from("task_assignments")
       .select("id", { count: "exact", head: true })
       .eq("child_id", parsed.child_id)
       .eq("status", "approved")
-      .gte("created_at", parsed.week_start)
-      .lte("created_at", endStr + "T23:59:59Z"),
+      .gte("created_at", weekFrom)
+      .lt("created_at", weekTo),
     supabase.from("coin_transactions")
       .select("amount")
       .eq("child_id", parsed.child_id)
       .gt("amount", 0)
-      .gte("created_at", parsed.week_start)
-      .lte("created_at", endStr + "T23:59:59Z"),
+      .gte("created_at", weekFrom)
+      .lt("created_at", weekTo),
     supabase.from("star_transactions")
       .select("amount")
       .eq("child_id", parsed.child_id)
       .gt("amount", 0)
-      .gte("created_at", parsed.week_start)
-      .lte("created_at", endStr + "T23:59:59Z"),
+      .gte("created_at", weekFrom)
+      .lt("created_at", weekTo),
   ]);
 
   const { data: upserted } = await supabase.from("weekly_reflections").upsert({

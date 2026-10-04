@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 type GuideLabels = {
   title: string;
@@ -121,7 +122,7 @@ export function ChildGuide({ labels, levels }: { labels: GuideLabels; levels?: L
       <div>
         <h4 className="mb-2 text-xs font-bold text-stone-600">{labels.symbolsTitle}</h4>
         <div className="grid grid-cols-1 gap-1.5">
-          <SymbolRow emoji="🪙" text={labels.symbolCoin} />
+          <SymbolRow emoji={<CoinIcon />} text={labels.symbolCoin} />
           <SymbolRow emoji="⭐" text={labels.symbolStar} />
           <SymbolRow emoji="✅" text={labels.symbolDone} />
           <SymbolRow emoji="⏳" text={labels.symbolWaiting} />
@@ -138,7 +139,7 @@ export function ChildGuide({ labels, levels }: { labels: GuideLabels; levels?: L
   );
 }
 
-function SymbolRow({ emoji, text }: { emoji: string; text: string }) {
+function SymbolRow({ emoji, text }: { emoji: React.ReactNode; text: string }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white/60 px-2.5 py-1.5">
       <span className="w-5 text-center text-sm">{emoji}</span>

@@ -117,7 +117,7 @@ export function EvidenceCapture({
           <button
             type="button"
             onClick={() => setShowCapture((v) => !v)}
-            className={`rounded-full px-2 py-1 text-[11px] font-semibold transition-colors ${
+            className={`rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
               showCapture
                 ? "bg-indigo-500 text-white"
                 : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200"
@@ -262,7 +262,7 @@ function PhotoCapture({
           <button
             type="button"
             onClick={() => { setFile(null); setPreview(null); }}
-            className="text-[11px] text-red-400 hover:text-red-600"
+            className="text-xs text-red-400 hover:text-red-600"
           >
             🗑 Xóa ảnh
           </button>
@@ -544,7 +544,7 @@ function TextCapture({
         className="w-full rounded-xl border border-stone-300 p-3 text-sm resize-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
         placeholder="..."
       />
-      <div className="text-right text-[10px] text-stone-400">{text.length}/500</div>
+      <div className="text-right text-xs text-stone-400">{text.length}/500</div>
       <div className="flex gap-2">
         {!evidenceRequired && (
           <Button

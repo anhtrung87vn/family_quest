@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { deleteAllTasks, resetAndRecloneTasks } from "./actions";
 
@@ -25,6 +26,7 @@ interface DangerZoneProps {
 }
 
 export function DangerZone({ taskCount, labels }: DangerZoneProps) {
+  const t = useTranslations("tasks");
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -65,7 +67,7 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
       });
       const data = await res.json();
       if (data.success) {
-        setRestoreMsg({ ok: true, msg: `${labels.restoreDone}: tasks +${data.restored?.tasks ?? 0}, rewards +${data.restored?.rewards ?? 0}` });
+        setRestoreMsg({ ok: true, msg: `${labels.restoreDone}: ${t("restoreCounts", { tasks: data.restored?.tasks ?? 0, rewards: data.restored?.rewards ?? 0 })}` });
         setTimeout(() => window.location.reload(), 1500);
       } else {
         setRestoreMsg({ ok: false, msg: data.error ?? labels.restoreError });
@@ -79,10 +81,12 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
   return (
     <div>
       <button
+        type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-400 shadow-sm transition-colors hover:border-red-300 hover:text-red-500"
       >
-        ⚙️ Quản lý
+        ⚙️ {t("manage")}
       </button>
 
       {open && (
@@ -95,7 +99,7 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
               <div className="mt-0.5 text-[11px] text-stone-500">{labels.backupDesc}</div>
             </div>
             <Button size="sm" onClick={handleBackup} className="shrink-0 bg-blue-500 text-xs text-white hover:bg-blue-600">
-              ⬇️ Download
+              ⬇️ {t("download")}
             </Button>
           </div>
 
@@ -113,7 +117,7 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
             <div>
               <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
               <Button size="sm" onClick={() => fileRef.current?.click()} className="shrink-0 bg-green-600 text-xs text-white hover:bg-green-700">
-                ⬆️ Upload
+                ⬆️ {t("upload")}
               </Button>
             </div>
           </div>
@@ -159,7 +163,7 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
             <div className="mb-2">
               <div className="text-xs font-semibold text-red-700">🗑 {labels.deleteAll}</div>
               <div className="mt-0.5 text-[11px] text-stone-500">
-                {taskCount} tasks đang active sẽ bị vô hiệu hoá.
+                {t("deleteAllCount", { count: taskCount })}
               </div>
             </div>
             {!confirmDelete ? (

@@ -210,19 +210,41 @@ export async function awardFamilyQuest(questId: string, userId: string | null) {
   if (qErr) throw qErr;
   if (mErr) throw mErr;
   const { coins, stars } = familyQuestAwards(members ?? [], quest.coin_reward ?? 0, quest.star_reward ?? 0);
-  const base = { transaction_type: "FAMILY_QUEST", reference_id: questId, description: `Family quest: ${quest.title}`, created_by: userId };
+  const base = { transaction_type: "FAMILY_QUEST" as const, reference_id: questId, description: `Family quest: ${quest.title}`, created_by: userId };
 
   if (coins.length) {
     const { error } = await db.from("coin_transactions").insert(coins.map((c) => ({ ...c, ...base })));
     if (error) throw error;
   }
-  if (stars.length) {
-    const { error } = await db.from("star_transactions").insert(stars.map((s) => ({ ...s, ...base })));
-    if (error) throw error;
-    for (const s of stars) {
-      const { data: child } = await db.from("children").select("lifetime_stars").eq("id", s.child_id).single();
-      await db.from("children").update({ lifetime_stars: (child?.lifetime_stars ?? 0) + s.amount }).eq("id", s.child_id);
-    }
+  for (const s of stars) {
+    await grantStars({ childId: s.child_id, amount: s.amount, ...base });
   }
   return { childrenRewarded: coins.length || stars.length };
+}
+
+/**
+ * Record a star award and add it to the child's lifetime_stars (which drives
+ * levels). Stars are never spent, so this is the only direction they move.
+ */
+export async function grantStars(input: {
+  childId: string;
+  amount: number;
+  transaction_type: "FAMILY_QUEST" | "RESPONSIBILITY_WEEK" | "BADGE_BONUS";
+  description: string;
+  reference_id?: string | null;
+  created_by?: string | null;
+}) {
+  if (input.amount <= 0) return;
+  const db = createAdminClient();
+  const { error } = await db.from("star_transactions").insert({
+    child_id: input.childId,
+    amount: input.amount,
+    transaction_type: input.transaction_type,
+    description: input.description,
+    reference_id: input.reference_id ?? null,
+    created_by: input.created_by ?? null,
+  });
+  if (error) throw error;
+  const { data: child } = await db.from("children").select("lifetime_stars").eq("id", input.childId).single();
+  await db.from("children").update({ lifetime_stars: (child?.lifetime_stars ?? 0) + input.amount }).eq("id", input.childId);
 }

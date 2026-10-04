@@ -16,7 +16,7 @@
 ## First-time Supabase setup
 
 1. Create the project.
-2. Run migrations `0001` → `0004` in order (`supabase db push` or via the SQL editor).
+2. Run every migration in `supabase/migrations/` in numeric order (`supabase db push` or via the SQL editor). Skip `0007_dev_seed.sql` (dev-only).
 3. In Auth settings:
    - Enable email provider (magic link).
    - Set Site URL to `NEXT_PUBLIC_SITE_URL`.

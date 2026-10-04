@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveContext } from "@/lib/dev-family";
+import { familyDateISO } from "@/lib/family-time";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export async function GET(
 
   const childName = sanitizeFilename(child?.name ?? "Child");
   const taskName = sanitizeFilename(task?.name ?? "Quest");
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = familyDateISO();
   const ext = ev.storage_path.split(".").pop() || (ev.evidence_type === "photo" ? "webp" : "webm");
   const filename = `${childName}-${taskName}-${dateStr}.${ext}`;
 

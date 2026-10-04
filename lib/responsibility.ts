@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { familyDateISO } from "@/lib/family-time";
 
 // Constants — easy to adjust in V2 without code change
 export const SUGGEST_THRESHOLD = 3;
@@ -163,7 +164,7 @@ export async function getIndependenceTrend(
     .select("id", { count: "exact", head: true })
     .eq("child_id", childId)
     .eq("status", "approved")
-    .gte("due_date", windowStart.toISOString().slice(0, 10));
+    .gte("due_date", familyDateISO(windowStart));
 
   // Habits graduated (lifetime)
   const { count: graduated } = await admin

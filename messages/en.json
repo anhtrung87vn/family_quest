@@ -7,7 +7,8 @@
     "cancel": "Cancel",
     "back": "Back",
     "loading": "Loading…",
-    "all": "All"
+    "all": "All",
+    "delete": "Delete"
   },
   "marketing": {
     "tagline": "A private reward space for our family.",
@@ -182,7 +183,13 @@
     "habitsGraduated": "Habits mastered",
     "independenceTitle": "Growing Independence",
     "independenceDesc": "Track responsibility habits and independence trends",
-    "independenceEmpty": "Data will appear as responsibility events are tracked."
+    "independenceEmpty": "Data will appear as responsibility events are tracked.",
+    "manage": "Manage",
+    "dangerConfirmPrompt": "Are you sure? This cannot be undone.",
+    "pendingSummary": "{tasks, plural, one {# task} other {# tasks}} · {rewards, plural, one {# reward} other {# rewards}}",
+    "noTasksToday": "No tasks today",
+    "perChild": "per child",
+    "libraryDifficulty": "Difficulty {value}/10"
   },
   "kids": {
     "addChild": "Add a child",
@@ -214,7 +221,13 @@
     "agePackEmpty": "Nothing new to send — everything for this age is already in your family.",
     "agePackSend": "Send to {name}",
     "agePackSent": "Sent: {tasks} quests, {assignments} assignments, {rewards} rewards.",
-    "agePackPrice": "≈ {price}đ"
+    "agePackPrice": "≈ {price}đ",
+    "assignedTasks": "Assigned tasks ({count})",
+    "statusSubmitted": "Awaiting approval",
+    "statusRejected": "Rejected",
+    "statusTodo": "In progress",
+    "revokeAssignment": "Withdraw task",
+    "gradeLabel": "Grade {grade}"
   },
   "tasks": {
     "newTask": "New task",
@@ -299,7 +312,26 @@
       "text": "Text reflection",
       "choice": "Choice reflection",
       "parent_observation": "Parent observation"
-    }
+    },
+    "noChildFits": "No child fits this age",
+    "ageRecommended": "rec. {age}",
+    "poolAdd": "Add to Quest Pool",
+    "poolRemove": "Remove from Quest Pool",
+    "editTask": "Edit task",
+    "deleteTask": "Delete task",
+    "deleteConfirm": "Delete this task? It will be disabled; history is kept.",
+    "deleteConfirmYes": "Yes, delete",
+    "dueDate": "Due date",
+    "outOfAgeBanner": "{count, plural, one {# active task doesn't} other {# active tasks don't}} fit any child's age",
+    "outOfAgeDisable": "Disable them",
+    "outOfAgeConfirm": "Disable {count, plural, one {# task} other {# tasks}}? History is kept.",
+    "clearSearch": "Clear search",
+    "filterByChild": "Filter by child",
+    "manage": "Manage",
+    "download": "Download",
+    "upload": "Upload",
+    "deleteAllCount": "{count, plural, one {# active task} other {# active tasks}} will be disabled.",
+    "restoreCounts": "tasks +{tasks}, rewards +{rewards}"
   },
   "rewards": {
     "newReward": "New reward",
@@ -332,7 +364,21 @@
     "search": "Search rewards…",
     "noResults": "No rewards match your search.",
     "onlyDreams": "All rewards are dream-tier. Add some everyday rewards too!",
-    "cloneTemplates": "+ Add from templates"
+    "cloneTemplates": "+ Add from templates",
+    "minLevel": "Unlocks at level",
+    "noLevel": "Any level",
+    "ages": "Ages",
+    "dreamGoal": "Dream goal",
+    "uncategorized": "Other",
+    "costPlaceholder": "Cost (coins)",
+    "stockPlaceholder": "Stock (blank = unlimited)",
+    "imageUrl": "Image URL (optional)",
+    "linkUrl": "Link URL (optional)",
+    "upload": "Upload",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete",
+    "clearSearch": "Clear search"
   },
   "approvals": {
     "title": "Approvals",
@@ -377,7 +423,13 @@
     "stopRecord": "Stop",
     "capture": "Capture",
     "cancel": "Cancel",
-    "recording": "Recording..."
+    "recording": "Recording...",
+    "levelGifts": "Level-up gifts to give",
+    "levelGiftReached": "{name} reached level {level} · {title}",
+    "levelGiftGive": "Given",
+    "details": "Details",
+    "cameraError": "Can't open the camera. Check camera permission.",
+    "micError": "Can't record audio. Check microphone permission."
   },
   "settings": {
     "language": "Language",
@@ -530,7 +582,38 @@
     "repairSection": "Things to fix",
     "repairPrompt": "Let's finish this one",
     "repairDone": "Done!",
-    "repairResolved": "Fixed! Good job."
+    "repairResolved": "Fixed! Good job.",
+    "levelGifts": "Level-up gifts",
+    "levelReached": "Reached level {level}",
+    "levelGiftPending": "Waiting",
+    "levelGiftGiven": "Given ✓",
+    "levelNextGift": "Level {level} in {stars} ⭐ — gift: {gift}",
+    "collection": "My collection",
+    "avatarFrames": "Avatar frames",
+    "profileThemes": "Profile themes",
+    "unlockAtLevel": "Level {level}",
+    "unlockAtLevelTitle": "Unlocks at level {level} · {title}",
+    "levelLockedHint": "You have the coins — keep earning stars to unlock!",
+    "messagesClearAll": "Clear all",
+    "messagesClear": "Clear",
+    "messagesFromParent": "Mom/Dad",
+    "messagesReacted": "You reacted {reaction}",
+    "noQuestsYetTitle": "No quests yet today",
+    "pickFromPoolBtn": "Pick a quest from the Pool",
+    "askParentForQuests": "Ask Mom or Dad to send you some quests",
+    "waitingSummary": "{n} waiting for approval",
+    "weeklyDoneCount": "This week: {n, plural, one {# quest} other {# quests}} done",
+    "almostThere": "Almost there",
+    "unlockWithStars": "Unlock with stars",
+    "moreCoins": "{n} more coins",
+    "viewDetails": "See details",
+    "dreamSetToast": "Dream set! Keep earning! 💪",
+    "newTag": "NEW",
+    "redeemCancelled": "↩️ Cancelled — coins returned",
+    "redeemWaiting": "⏳ Waiting for Mom or Dad",
+    "redeemCancel": "↩️ Cancel request",
+    "redeemDone": "🎉 Redeemed!",
+    "processing": "⏳ Processing..."
   },
   "errors": {
     "generic": "Something went wrong.",

@@ -108,17 +108,17 @@ describe("rewardIcon", () => {
 });
 
 describe("levelIcon", () => {
-  it("returns correct icons for each level", () => {
+  it("returns a distinct icon for each of the 12 levels", () => {
     expect(levelIcon(1)).toBe("🌱");
-    expect(levelIcon(2)).toBe("🧭");
-    expect(levelIcon(3)).toBe("🚀");
-    expect(levelIcon(4)).toBe("🌟");
-    expect(levelIcon(5)).toBe("🏆");
-    expect(levelIcon(6)).toBe("👑");
+    expect(levelIcon(3)).toBe("🧭");
+    expect(levelIcon(6)).toBe("🌟");
+    expect(levelIcon(12)).toBe("👑");
+    const icons = Array.from({ length: 12 }, (_, i) => levelIcon(i + 1));
+    expect(new Set(icons).size).toBe(12);
   });
 
   it("clamps to last icon for levels beyond max", () => {
-    expect(levelIcon(7)).toBe("👑");
+    expect(levelIcon(13)).toBe("👑");
     expect(levelIcon(100)).toBe("👑");
   });
 });

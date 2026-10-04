@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { createReward, uploadRewardImage } from "./actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 interface CreateRewardFormProps {
   labels: {
@@ -12,17 +13,32 @@ interface CreateRewardFormProps {
     cost: string;
     stock: string;
     stockHint: string;
+    minLevel: string;
+    noLevel: string;
     requiresApproval: string;
     dreamEligible: string;
     create: string;
     infoSection: string;
     costAndStock: string;
     options: string;
+    imageUrl: string;
+    linkUrl: string;
+    upload: string;
     cats: { small: string; medium: string; large: string; experience: string; dream: string };
   };
 }
 
-function ImagePicker({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+function ImagePicker({
+  value,
+  onChange,
+  placeholder,
+  uploadLabel,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  placeholder: string;
+  uploadLabel: string;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, startUpload] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +61,8 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           type="url"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="🖼 Image URL (optional)"
-          className="h-11 flex-1 rounded-xl border border-stone-300 px-3 text-sm"
+          placeholder={`🖼 ${placeholder}`}
+          className="h-11 min-w-0 flex-1 rounded-xl border border-stone-300 px-3 text-sm"
         />
         <button
           type="button"
@@ -54,7 +70,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           disabled={uploading}
           className="shrink-0 rounded-xl border border-stone-300 bg-stone-50 px-3 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-50"
         >
-          {uploading ? "⏳" : "📁 Upload"}
+          {uploading ? "⏳" : `📁 ${uploadLabel}`}
         </button>
         <input
           ref={inputRef}
@@ -64,7 +80,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
       </div>
-      {error && <div className="text-[10px] text-red-500">{error}</div>}
+      {error && <div className="text-[11px] text-red-500">{error}</div>}
       {value && (
         <div className="relative inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -72,7 +88,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           <button
             type="button"
             onClick={() => onChange("")}
-            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white hover:bg-red-600"
+            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] text-white hover:bg-red-600"
           >✕</button>
         </div>
       )}
@@ -96,8 +112,8 @@ export function CreateRewardForm({ labels }: CreateRewardFormProps) {
           className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm" />
         <input name="description" placeholder={labels.description}
           className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm" />
-        <ImagePicker value={imageUrl} onChange={setImageUrl} />
-        <input name="link_url" type="url" placeholder="🔗 Link URL (optional)"
+        <ImagePicker value={imageUrl} onChange={setImageUrl} placeholder={labels.imageUrl} uploadLabel={labels.upload} />
+        <input name="link_url" type="url" placeholder={`🔗 ${labels.linkUrl}`}
           className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm" />
         <select name="category" className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm">
           <option value="">{labels.category}</option>
@@ -115,7 +131,7 @@ export function CreateRewardForm({ labels }: CreateRewardFormProps) {
         </legend>
         <div className="grid grid-cols-2 gap-3">
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-amber-600">🪙</span>
+            <span className="text-amber-600"><CoinIcon /></span>
             <span className="text-stone-600">{labels.cost}</span>
             <input name="coin_cost" type="number" min={1} defaultValue={30}
               className="h-10 w-24 rounded-xl border border-stone-300 px-3 text-sm" />
@@ -126,6 +142,16 @@ export function CreateRewardForm({ labels }: CreateRewardFormProps) {
             <input name="stock" type="number" min={0}
               placeholder={labels.stockHint}
               className="h-10 w-24 rounded-xl border border-stone-300 px-3 text-sm" />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-stone-500">🔒</span>
+            <span className="text-stone-600">{labels.minLevel}</span>
+            <select name="min_level" defaultValue="" className="h-10 rounded-xl border border-stone-300 px-2 text-sm">
+              <option value="">{labels.noLevel}</option>
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((lv) => (
+                <option key={lv} value={lv}>⭐ Lv.{lv}</option>
+              ))}
+            </select>
           </label>
         </div>
       </fieldset>

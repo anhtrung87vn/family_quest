@@ -4,14 +4,13 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { saveReflection } from "./actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
+import { familyDateISO, familyDayStart, mondayOfISO } from "@/lib/family-time";
 
 export const dynamic = "force-dynamic";
 
 function currentWeekStart() {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff)).toISOString().slice(0, 10);
+  return mondayOfISO(familyDateISO());
 }
 
 export default async function ReflectionsPage({
@@ -44,7 +43,7 @@ export default async function ReflectionsPage({
         .from("child_badges")
         .select("badge:badges(icon, name_en, name_vi)")
         .eq("child_id", c.id)
-        .gte("earned_at", weekStart)
+        .gte("earned_at", familyDayStart(weekStart).toISOString())
         .limit(5);
       return { childId: c.id, badges: data ?? [] };
     }),
@@ -78,7 +77,7 @@ export default async function ReflectionsPage({
                   {ref && (
                     <div className="flex items-center gap-1.5 ml-1">
                       <span className="rounded-full bg-emerald-100 px-1.5 py-0 text-[10px] font-semibold text-emerald-700 leading-5">✅ {ref.tasks_completed}</span>
-                      <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-700 leading-5">🪙 {ref.coins_earned}</span>
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-700 leading-5"><CoinIcon /> {ref.coins_earned}</span>
                       <span className="rounded-full bg-purple-100 px-1.5 py-0 text-[10px] font-semibold text-purple-700 leading-5">⭐ {ref.stars_earned}</span>
                     </div>
                   )}

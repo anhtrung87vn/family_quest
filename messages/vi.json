@@ -7,7 +7,8 @@
     "cancel": "Huỷ",
     "back": "Quay lại",
     "loading": "Đang tải…",
-    "all": "Tất cả"
+    "all": "Tất cả",
+    "delete": "Xóa"
   },
   "marketing": {
     "tagline": "Không gian phần thưởng riêng cho gia đình.",
@@ -182,7 +183,13 @@
     "habitsGraduated": "Thói quen đã thành thạo",
     "independenceTitle": "Phát Triển Tự Lập",
     "independenceDesc": "Theo dõi thói quen trách nhiệm và xu hướng tự lập",
-    "independenceEmpty": "Dữ liệu sẽ xuất hiện khi có sự kiện trách nhiệm."
+    "independenceEmpty": "Dữ liệu sẽ xuất hiện khi có sự kiện trách nhiệm.",
+    "manage": "Quản lý",
+    "dangerConfirmPrompt": "Bạn chắc chắn chứ? Thao tác này không thể hoàn tác.",
+    "pendingSummary": "{tasks} nhiệm vụ · {rewards} phần thưởng",
+    "noTasksToday": "Hôm nay chưa có nhiệm vụ",
+    "perChild": "mỗi bé",
+    "libraryDifficulty": "Độ khó {value}/10"
   },
   "kids": {
     "addChild": "Thêm bé",
@@ -214,7 +221,13 @@
     "agePackEmpty": "Không có gì mới để gửi — mọi thứ cho độ tuổi này đã có trong gia đình.",
     "agePackSend": "Gửi cho {name}",
     "agePackSent": "Đã gửi: {tasks} nhiệm vụ, {assignments} lượt giao, {rewards} phần thưởng.",
-    "agePackPrice": "≈ {price}đ"
+    "agePackPrice": "≈ {price}đ",
+    "assignedTasks": "Nhiệm vụ đang giao ({count})",
+    "statusSubmitted": "Chờ duyệt",
+    "statusRejected": "Bị từ chối",
+    "statusTodo": "Đang làm",
+    "revokeAssignment": "Rút lại nhiệm vụ",
+    "gradeLabel": "Lớp {grade}"
   },
   "tasks": {
     "newTask": "Nhiệm vụ mới",
@@ -299,7 +312,26 @@
       "text": "Viết suy nghĩ",
       "choice": "Chọn cảm nhận",
       "parent_observation": "Bố mẹ ghi nhận"
-    }
+    },
+    "noChildFits": "Không bé nào hợp độ tuổi",
+    "ageRecommended": "đề xuất {age}",
+    "poolAdd": "Thêm vào Kho nhiệm vụ",
+    "poolRemove": "Bỏ khỏi Kho nhiệm vụ",
+    "editTask": "Sửa nhiệm vụ",
+    "deleteTask": "Xoá nhiệm vụ",
+    "deleteConfirm": "Xoá nhiệm vụ này? Nhiệm vụ sẽ bị vô hiệu hoá, không mất lịch sử.",
+    "deleteConfirmYes": "Xác nhận xoá",
+    "dueDate": "Hạn hoàn thành",
+    "outOfAgeBanner": "{count} nhiệm vụ đang hoạt động không hợp độ tuổi của bé nào",
+    "outOfAgeDisable": "Tắt các nhiệm vụ này",
+    "outOfAgeConfirm": "Tắt {count} nhiệm vụ? Lịch sử vẫn được giữ.",
+    "clearSearch": "Xoá tìm kiếm",
+    "filterByChild": "Lọc theo bé",
+    "manage": "Quản lý",
+    "download": "Tải xuống",
+    "upload": "Tải lên",
+    "deleteAllCount": "{count} nhiệm vụ đang hoạt động sẽ bị vô hiệu hoá.",
+    "restoreCounts": "nhiệm vụ +{tasks}, phần thưởng +{rewards}"
   },
   "rewards": {
     "newReward": "Phần thưởng mới",
@@ -332,7 +364,21 @@
     "search": "Tìm phần thưởng…",
     "noResults": "Không tìm thấy phần thưởng.",
     "onlyDreams": "Chỉ có phần thưởng ước mơ. Thêm phần thưởng nhỏ hơn nữa nhé!",
-    "cloneTemplates": "+ Thêm từ mẫu"
+    "cloneTemplates": "+ Thêm từ mẫu",
+    "minLevel": "Mở khóa từ cấp",
+    "noLevel": "Mọi cấp",
+    "ages": "Tuổi",
+    "dreamGoal": "Mục tiêu ước mơ",
+    "uncategorized": "Khác",
+    "costPlaceholder": "Giá (xu)",
+    "stockPlaceholder": "Số lượng (trống = không giới hạn)",
+    "imageUrl": "Link ảnh (tuỳ chọn)",
+    "linkUrl": "Đường dẫn (tuỳ chọn)",
+    "upload": "Tải lên",
+    "edit": "Sửa",
+    "delete": "Xoá",
+    "deleteConfirm": "Xoá",
+    "clearSearch": "Xoá tìm kiếm"
   },
   "approvals": {
     "title": "Duyệt",
@@ -377,7 +423,13 @@
     "stopRecord": "Dừng",
     "capture": "Chụp",
     "cancel": "Huỷ",
-    "recording": "Đang ghi..."
+    "recording": "Đang ghi...",
+    "levelGifts": "Quà lên cấp chờ trao",
+    "levelGiftReached": "{name} đã lên cấp {level} · {title}",
+    "levelGiftGive": "Đã trao",
+    "details": "Chi tiết",
+    "cameraError": "Không thể mở camera. Kiểm tra quyền truy cập.",
+    "micError": "Không thể ghi âm. Kiểm tra quyền truy cập."
   },
   "settings": {
     "language": "Ngôn ngữ",
@@ -530,7 +582,38 @@
     "repairSection": "Việc cần sửa lại",
     "repairPrompt": "Mình hoàn thành nhé",
     "repairDone": "Xong rồi!",
-    "repairResolved": "Đã sửa xong."
+    "repairResolved": "Đã sửa xong.",
+    "levelGifts": "Quà lên cấp",
+    "levelReached": "Đạt cấp {level}",
+    "levelGiftPending": "Chờ ba mẹ trao",
+    "levelGiftGiven": "Đã nhận ✓",
+    "levelNextGift": "Cấp {level} còn {stars} ⭐ — quà: {gift}",
+    "collection": "Bộ sưu tập của con",
+    "avatarFrames": "Khung avatar",
+    "profileThemes": "Giao diện hồ sơ",
+    "unlockAtLevel": "Cấp {level}",
+    "unlockAtLevelTitle": "Mở ở cấp {level} · {title}",
+    "levelLockedHint": "Con đủ xu rồi — tiếp tục kiếm sao để mở khóa nhé!",
+    "messagesClearAll": "Xóa hết",
+    "messagesClear": "Xóa",
+    "messagesFromParent": "Bố/Mẹ",
+    "messagesReacted": "Con đã phản hồi {reaction}",
+    "noQuestsYetTitle": "Hôm nay chưa có nhiệm vụ nào",
+    "pickFromPoolBtn": "Chọn nhiệm vụ từ Kho nhiệm vụ",
+    "askParentForQuests": "Nhờ bố mẹ gửi cho con vài nhiệm vụ nhé",
+    "waitingSummary": "{n} nhiệm vụ đang chờ duyệt",
+    "weeklyDoneCount": "Tuần này: {n} nhiệm vụ đã xong",
+    "almostThere": "Sắp đổi được rồi",
+    "unlockWithStars": "Mở khoá bằng sao",
+    "moreCoins": "Còn {n} xu nữa",
+    "viewDetails": "Xem chi tiết",
+    "dreamSetToast": "Đã đặt ước mơ! Tiếp tục cố gắng nhé 💪",
+    "newTag": "MỚI",
+    "redeemCancelled": "↩️ Đã huỷ, xu đã trả lại",
+    "redeemWaiting": "⏳ Đang chờ ba/mẹ duyệt",
+    "redeemCancel": "↩️ Huỷ yêu cầu",
+    "redeemDone": "🎉 Đã đổi thành công!",
+    "processing": "⏳ Đang xử lý..."
   },
   "errors": {
     "generic": "Có lỗi rồi.",

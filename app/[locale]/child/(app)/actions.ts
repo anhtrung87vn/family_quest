@@ -174,7 +174,7 @@ export async function requestRewardAction(
     // Fetch reward details
     const { data: reward, error: rewardErr } = await admin
       .from("rewards")
-      .select("id, family_id, coin_cost, requires_approval, active, stock")
+      .select("id, family_id, coin_cost, requires_approval, active, stock, min_level")
       .eq("id", reward_id)
       .single();
     if (rewardErr || !reward) { console.error("[requestRewardAction] reward fetch error:", rewardErr); return { ok: false, error: "Reward not found" }; }
@@ -182,8 +182,14 @@ export async function requestRewardAction(
     if (reward.stock !== null && reward.stock <= 0) return { ok: false, error: "Out of stock" };
 
     // Check child belongs to same family
-    const { data: child } = await admin.from("children").select("family_id").eq("id", session.childId).single();
+    const { data: child } = await admin.from("children").select("family_id, lifetime_stars").eq("id", session.childId).single();
     if (!child || child.family_id !== reward.family_id) return { ok: false, error: "Family mismatch" };
+
+    // Level-gated rewards unlock with lifetime stars; coins still pay for them.
+    const { getLevelInfo } = await import("@/lib/levels");
+    if ((reward.min_level ?? 1) > getLevelInfo(child.lifetime_stars ?? 0).level) {
+      return { ok: false, error: `Unlocks at level ${reward.min_level}` };
+    }
 
     // Check balance
     const { coin } = await (await import("@/lib/ledger")).getChildBalance(session.childId);
@@ -460,6 +466,7 @@ export async function refreshPoolAction(formData: FormData) {
   if (error) throw new Error("Already refreshed today");
 
   revalidatePath("/[locale]/child/home", "page");
+  revalidatePath("/[locale]/child/quests", "page");
 }
 
 /**

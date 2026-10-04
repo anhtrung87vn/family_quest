@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { EvidenceReview, type EvidenceItem } from "@/components/ui/EvidenceReview";
 import { getEvidenceSignedUrl } from "@/app/[locale]/(parent)/approvals/actions";
 import Link from "next/link";
+import { FAMILY_TIME_ZONE } from "@/lib/family-time";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export default async function EvidenceDetailPage({
   };
 
   const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+    new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: FAMILY_TIME_ZONE });
 
   const statusLabel = (s: string) => {
     if (s === "active") return locale === "vi" ? "Đang hoạt động" : "Active";

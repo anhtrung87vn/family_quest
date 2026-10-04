@@ -4,13 +4,19 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Collapsible } from "@/components/ui/Collapsible";
+import { PendingApprovalRow, PendingSubmitButton } from "@/components/ui/PendingApprovalRow";
 import {
+  approveCompletion,
   rejectCompletion,
   approveRedemptionAction,
   rejectRedemptionAction,
   adjustCoins,
   getEvidenceSignedUrl,
+  markLevelGiftGiven,
 } from "./actions";
+import { syncLevelUps, pendingLevelGifts, type PendingLevelGift } from "@/lib/level-ups";
+import { levelGift, levelTitle } from "@/lib/levels";
+import { levelIcon } from "@/lib/category-style";
 import { EvidenceReview, type EvidenceItem } from "@/components/ui/EvidenceReview";
 import { ParentNoteForm } from "@/components/ui/ParentNoteForm";
 import { ApproveForm } from "@/components/ui/ApproveForm";
@@ -20,6 +26,10 @@ import { handleMissedResponsibility, startHabitSupport } from "../tasks/responsi
 import { todayISO } from "@/lib/recurrence";
 import { getResponsibilitySummary } from "@/lib/responsibility";
 import { HabitSuggestionCard } from "@/components/ui/HabitSuggestionCard";
+import { CoinIcon } from "@/components/ui/CoinIcon";
+import { timeAgo } from "@/lib/time-ago";
+
+/** Localized "5 minutes ago" / "5 phút trước" for a past timestamp. */
 
 export default async function ApprovalsPage({
   params,
@@ -51,7 +61,7 @@ export default async function ApprovalsPage({
       .eq("status", "requested")
       .eq("child.family_id", familyId)
       .order("requested_at", { ascending: true }),
-    supabase.from("children").select("id, name, avatar_url").eq("family_id", familyId).order("created_at"),
+    supabase.from("children").select("id, name, avatar_url, lifetime_stars").eq("family_id", familyId).order("created_at"),
     supabase
       .from("task_assignments")
       .select("id, status, due_date, child:children!inner(id, name, avatar_url), task:tasks(id, name, name_vi, behavior_type, responsibility_policy, category)")
@@ -188,15 +198,25 @@ export default async function ApprovalsPage({
     savedToMemories: t("approvals.savedToMemories"),
   };
   const choiceLabels: Record<string, string> = {
-    easy: locale === "vi" ? "Dễ lắm!" : "It was easy!",
-    hard: locale === "vi" ? "Khó nhưng con làm được!" : "It was hard but I did it!",
-    helped: locale === "vi" ? "Con được giúp một chút" : "I got some help",
-    learned: locale === "vi" ? "Con học được điều mới!" : "I learned something new!",
-    fun: locale === "vi" ? "Vui lắm!" : "It was fun!",
-    proud: locale === "vi" ? "Con tự hào về việc này!" : "I'm proud of this!",
+    easy: t("child.choiceEasy"),
+    hard: t("child.choiceHard"),
+    helped: t("child.choiceHelped"),
+    learned: t("child.choiceLearned"),
+    fun: t("child.choiceFun"),
+    proud: t("child.choiceProud"),
   };
 
-  const totalPending = (pendingTasks?.length ?? 0) + (pendingRedemptions?.length ?? 0) + missedResponsibilities.length;
+  // Level-up gifts: record any newly reached level, then list gifts not yet given.
+  let levelGifts: PendingLevelGift[] = [];
+  try {
+    await Promise.all((children ?? []).map((c) => syncLevelUps(c.id, c.lifetime_stars ?? 0)));
+    levelGifts = await pendingLevelGifts((children ?? []).map((c) => c.id));
+  } catch (err) {
+    console.error("[ApprovalsPage] level gifts failed", err);
+  }
+  const childName = new Map((children ?? []).map((c) => [c.id, c.name]));
+
+  const totalPending = (pendingTasks?.length ?? 0) + (pendingRedemptions?.length ?? 0) + missedResponsibilities.length + levelGifts.length;
 
   const missedLabels = {
     whatHappened: t("parent.whatHappened"),
@@ -221,6 +241,34 @@ export default async function ApprovalsPage({
           </span>
         )}
       </div>
+
+      {/* 🎁 Level-up gifts waiting to be given */}
+      {levelGifts.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-amber-700">
+            🎁 {t("approvals.levelGifts")} ({levelGifts.length})
+          </h2>
+          <ul className="space-y-2">
+            {levelGifts.map((g) => (
+              <li key={g.id}>
+                <Card className="flex items-center gap-3 border-amber-200 bg-amber-50">
+                  <span className="text-2xl">{levelIcon(g.level)}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-stone-800">
+                      {t("approvals.levelGiftReached", { name: childName.get(g.child_id) ?? "", level: g.level, title: levelTitle(g.level, locale) })}
+                    </div>
+                    <div className="text-xs text-stone-600">🎁 {levelGift(g.level, locale)}</div>
+                  </div>
+                  <form action={markLevelGiftGiven}>
+                    <input type="hidden" name="id" value={g.id} />
+                    <Button type="submit" size="sm">{t("approvals.levelGiftGive")}</Button>
+                  </form>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* All clear state */}
       {totalPending === 0 && (
@@ -316,70 +364,97 @@ export default async function ApprovalsPage({
               const a = Array.isArray(c.assignment) ? c.assignment[0] : c.assignment;
               const child = Array.isArray(a?.child) ? a?.child[0] : a?.child;
               const task = Array.isArray(a?.task) ? a?.task[0] : a?.task;
-              const submitted = c.submitted_at ? new Date(c.submitted_at) : null;
+              const evidence = evidenceMap.get(c.id);
               return (
                 <Card key={c.id} className="border-blue-100 !p-3">
-                  <Collapsible
-                    trigger={
-                      <div className="flex items-center gap-2">
-                        {(child as any)?.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={(child as any).avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-2 ring-blue-200" />
-                        ) : (
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700 ring-2 ring-blue-200">
-                            {child?.name?.slice(0, 1)}
-                          </div>
+                  <PendingApprovalRow
+                    detailsLabel={t("approvals.details")}
+                    actions={
+                      <>
+                        {/* One-tap approve: same action as the detailed form with no message or media */}
+                        <form action={approveCompletion}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <PendingSubmitButton className="bg-emerald-500 text-white hover:bg-emerald-600">
+                            ✓ {t("approvals.approve")}
+                          </PendingSubmitButton>
+                        </form>
+                        <form action={rejectCompletion}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <PendingSubmitButton className="border border-red-200 bg-white text-red-600 hover:bg-red-50">
+                            ✗ {t("approvals.reject")}
+                          </PendingSubmitButton>
+                        </form>
+                      </>
+                    }
+                    details={
+                      <>
+                        {evidence && (
+                          <EvidenceReview
+                            evidence={evidence}
+                            labels={evidenceLabels}
+                            choiceLabels={choiceLabels}
+                          />
                         )}
-                        <div className="flex-1 min-w-0 flex items-center gap-1 flex-wrap">
-                          <span className="font-semibold text-xs text-stone-800">{child?.name}</span>
-                          <span className="text-stone-300 text-[10px]">·</span>
-                          <span className="text-[11px] text-stone-600 truncate max-w-[120px]">{task?.name}</span>
-                          <span className="rounded-full bg-amber-100 px-1 py-0 text-[10px] font-semibold text-amber-700 leading-4">🪙+{task?.coin_reward}</span>
-                          {task?.star_reward > 0 && (
-                            <span className="rounded-full bg-purple-100 px-1 py-0 text-[10px] font-semibold text-purple-700 leading-4">⭐+{task?.star_reward}</span>
+
+                        {/* Approve with celebration message / media */}
+                        <ApproveForm
+                          completionId={c.id}
+                          quickMessages={[t("approvals.quickMsg1"), t("approvals.quickMsg2"), t("approvals.quickMsg3"), t("approvals.quickMsg4")]}
+                          labels={{
+                            celebration: t("approvals.celebration"),
+                            approve: t("approvals.approve"),
+                            camera: t("approvals.camera"),
+                            gallery: t("approvals.gallery"),
+                            record: t("approvals.record"),
+                            stopRecord: t("approvals.stopRecord"),
+                            capture: t("approvals.capture"),
+                            cancel: t("approvals.cancel"),
+                            cameraError: t("approvals.cameraError"),
+                            micError: t("approvals.micError"),
+                          }}
+                        />
+
+                        {/* Reject with a note */}
+                        <form action={rejectCompletion} className="flex gap-1.5">
+                          <input type="hidden" name="id" value={c.id} />
+                          <input name="note" placeholder={t("approvals.noteOptional")}
+                            className="h-8 min-w-0 flex-1 rounded-lg border border-stone-300 px-2.5 text-xs" />
+                          <Button size="sm" variant="ghost" type="submit" className="h-8 shrink-0 px-2 text-xs text-red-500 hover:text-red-700">
+                            ✗ {t("approvals.reject")}
+                          </Button>
+                        </form>
+                      </>
+                    }
+                  >
+                    <div className="flex items-start gap-3">
+                      {(child as any)?.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={(child as any).avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-blue-200" />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700 ring-2 ring-blue-200">
+                          {child?.name?.slice(0, 1)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-sm font-semibold text-stone-800">{child?.name}</span>
+                          {c.submitted_at && (
+                            <span className="text-xs text-stone-400">{timeAgo(c.submitted_at, locale)}</span>
                           )}
-                          {submitted && (
-                            <span className="text-[10px] text-stone-400">{submitted.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                        <p className="mt-0.5 break-words text-sm leading-snug text-stone-700">{task?.name}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700"><CoinIcon />+{task?.coin_reward}</span>
+                          {task?.star_reward > 0 && (
+                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">⭐+{task?.star_reward}</span>
+                          )}
+                          {evidence && (
+                            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">📎 {t("approvals.evidenceLabel")}</span>
                           )}
                         </div>
                       </div>
-                    }
-                  >
-                    {/* Evidence display */}
-                    {evidenceMap.has(c.id) && (
-                      <EvidenceReview
-                        evidence={evidenceMap.get(c.id)!}
-                        labels={evidenceLabels}
-                        choiceLabels={choiceLabels}
-                      />
-                    )}
-
-                    {/* Approve with media + reject */}
-                    <div className="mt-2 space-y-1.5 border-t border-stone-100 pt-2">
-                      <ApproveForm
-                        completionId={c.id}
-                        quickMessages={[t("approvals.quickMsg1"), t("approvals.quickMsg2"), t("approvals.quickMsg3"), t("approvals.quickMsg4")]}
-                        labels={{
-                          celebration: t("approvals.celebration"),
-                          approve: t("approvals.approve"),
-                          camera: t("approvals.camera"),
-                          gallery: t("approvals.gallery"),
-                          record: t("approvals.record"),
-                          stopRecord: t("approvals.stopRecord"),
-                          capture: t("approvals.capture"),
-                          cancel: t("approvals.cancel"),
-                        }}
-                      />
-                      <form action={rejectCompletion} className="flex gap-1.5">
-                        <input type="hidden" name="id" value={c.id} />
-                        <input name="note" placeholder={t("approvals.noteOptional")}
-                          className="h-7 flex-1 rounded-lg border border-stone-300 px-2.5 text-xs" />
-                        <Button size="sm" variant="ghost" type="submit" className="h-7 px-2 text-[11px] text-red-500 hover:text-red-700">
-                          ❌ {t("approvals.reject")}
-                        </Button>
-                      </form>
                     </div>
-                  </Collapsible>
+                  </PendingApprovalRow>
                 </Card>
               );
             })}
@@ -419,7 +494,7 @@ export default async function ApprovalsPage({
                       </div>
                       <div className="mt-1">
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                          🪙 {r.coin_cost}
+                          <CoinIcon /> {r.coin_cost}
                         </span>
                       </div>
                       <div className="mt-3 space-y-2">
@@ -486,22 +561,15 @@ export default async function ApprovalsPage({
           <div className="space-y-2">
             {recentMessages.map((msg) => {
               const child = children?.find((c) => c.id === msg.child_id);
-              const childName = child?.name ?? "Con";
+              const childName = child?.name ?? t("approvals.child");
               const taskName = msg.reference_id ? taskNameMap.get(msg.reference_id) : undefined;
-              const ago = (() => {
-                const diff = Date.now() - new Date(msg.created_at).getTime();
-                const mins = Math.floor(diff / 60000);
-                if (mins < 60) return `${mins} phút trước`;
-                const hrs = Math.floor(mins / 60);
-                if (hrs < 24) return `${hrs} giờ trước`;
-                return `${Math.floor(hrs / 24)} ngày trước`;
-              })();
+              const ago = timeAgo(msg.created_at, locale);
               return (
                 <div key={msg.id} className="rounded-xl border border-stone-200 bg-white p-3">
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-pink-600">{childName}</span>
-                      <span className="text-[10px] text-stone-400">{ago}</span>
+                      <span className="text-[11px] text-stone-400">{ago}</span>
                       {msg.message_type === "QUEST_APPROVAL" && taskName && (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
                           ✅ {taskName}
@@ -528,11 +596,11 @@ export default async function ApprovalsPage({
         </Card>
       )}
 
-      {/* 🪙 Manual coin adjustment — tucked away in collapsible */}
+      {/* Manual coin adjustment — tucked away in collapsible */}
       <Card>
         <Collapsible
           trigger={
-            <span className="text-sm font-semibold text-stone-500">🪙 {t("approvals.adjust")}</span>
+            <span className="text-sm font-semibold text-stone-500"><CoinIcon /> {t("approvals.adjust")}</span>
           }
         >
           <form action={adjustCoins} className="mt-1 flex flex-wrap items-center gap-2">

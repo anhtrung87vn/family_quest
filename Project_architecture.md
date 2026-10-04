@@ -309,6 +309,7 @@ Defined in `globals.css`:
 ### Icons
 
 - Use emoji for all icons (no icon library).
+- Exception: Quest Coins use `<CoinIcon />` (`components/ui/CoinIcon.tsx`), because the 🪙 emoji renders silver on Apple and gold on Android. Plain-text messages say "xu" instead.
 - Category → icon mapping in `lib/category-style.ts`.
 - Reward → icon mapping in `rewardIcon()` function.
 - Level → icon: `["🌱", "🧭", "🚀", "🌟", "🏆", "👑"]`.
@@ -382,10 +383,16 @@ Never use `next/navigation` redirect directly — use `redirect({ href, locale }
 
 ### Migrations
 
-- Sequential numbering: `0001_init.sql`, `0002_rls.sql`, ..., `0023_task_reward_locale.sql`.
-- Located in `supabase/migrations/`.
+- Sequential numbering: `0001_init.sql`, `0002_rls.sql`, ... (no gaps except the removed no-op `0004`).
+- Located in `supabase/migrations/`. A fresh database is built by running all of them in order; there is no consolidated schema file.
+- Never edit a migration that has been applied — add a new numbered one.
+
+### Dates and time zone
+
+- The family calendar is `Asia/Bangkok` (`lib/family-time.ts`). Servers run in UTC, so never use `getDate()` / `getDay()` / `toISOString().slice(0, 10)` for calendar logic.
+- "Today" → `todayISO()` / `familyDateISO()`; weekday → `familyWeekday()`; week start → `mondayOfISO()`; midnight of a day as an instant (for `timestamptz` filters) → `familyDayStart(iso)`.
+- Display dates with `timeZone: FAMILY_TIME_ZONE`. The database default time zone is also `Asia/Bangkok` (migration `0039`).
 - Always use `if not exists` / `if exists` for idempotent DDL.
-- Canonical schema reference: `supabase/migrations/full_schema.sql`.
 
 ### Row-Level Security (RLS)
 

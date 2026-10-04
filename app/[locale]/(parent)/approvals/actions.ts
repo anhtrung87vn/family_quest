@@ -92,7 +92,12 @@ export async function approveCompletion(formData: FormData) {
   });
   if (msgErr) console.error("[approveCompletion] parent_messages insert failed:", msgErr);
 
-  await checkAndAwardBadges(childId);
+  // Badges are a bonus; a failure must not undo the approval.
+  try {
+    await checkAndAwardBadges(childId);
+  } catch (e) {
+    console.error("[approveCompletion] checkAndAwardBadges failed:", e);
+  }
 
   revalidatePath("/[locale]/approvals", "page");
   revalidatePath("/[locale]/dashboard", "page");
@@ -128,7 +133,7 @@ export async function approveRedemptionAction(formData: FormData) {
   if (redemption) {
     const reward = Array.isArray(redemption.reward) ? redemption.reward[0] : redemption.reward;
     if (reward) {
-      const baseMsg = `🎁 Yêu cầu đổi thưởng "${reward.name}" đã được duyệt! Bạn đã tiêu ${redemption.coin_cost} 🪙. Tận hưởng nhé! 🎉`;
+      const baseMsg = `🎁 Yêu cầu đổi thưởng "${reward.name}" đã được duyệt! Bạn đã tiêu ${redemption.coin_cost} xu. Tận hưởng nhé! 🎉`;
       const message = note ? `${baseMsg}\n\n💬 ${note}` : baseMsg;
       await admin.from("parent_messages").insert({
         family_id: familyId,
@@ -438,4 +443,21 @@ export async function getEvidenceSignedUrl(storagePath: string): Promise<string 
     return null;
   }
   return data?.signedUrl ?? null;
+}
+
+export async function markLevelGiftGiven(formData: FormData) {
+  const id = z.string().uuid().parse(formData.get("id"));
+  const { familyId, userId } = await resolveContext();
+  const db = createAdminClient();
+  const { data: lu } = await db.from("child_level_ups").select("child_id").eq("id", id).maybeSingle();
+  if (!lu) throw new Error("Level-up not found");
+  await assertChildInFamily(lu.child_id, familyId);
+  const { error } = await db
+    .from("child_level_ups")
+    .update({ gifted_at: new Date().toISOString(), gifted_by: userId })
+    .eq("id", id)
+    .is("gifted_at", null);
+  if (error) throw error;
+  revalidatePath("/[locale]/(parent)/approvals", "page");
+  revalidatePath("/[locale]/child/(app)/me", "page");
 }

@@ -8,6 +8,8 @@ import { todayISO } from "@/lib/recurrence";
 import { resolveContext } from "@/lib/dev-family";
 import { assertChildInFamily, assertTaskInFamily } from "@/lib/authz";
 import { REWARD_TEMPLATE_COLUMNS, toFamilyReward } from "@/lib/age-provisioning";
+import { ageFromDob } from "@/lib/age";
+import { tasksFittingNoChild } from "@/lib/task-age-fit";
 
 const requireFamily = resolveContext;
 
@@ -369,4 +371,41 @@ export async function assignTask(formData: FormData) {
 
   revalidatePath("/[locale]/(parent)/tasks", "page");
   revalidatePath("/[locale]/(parent)/dashboard", "page");
+}
+
+/**
+ * Soft-delete (active=false) every active family task whose age range fits none
+ * of the family's children. Re-computed here rather than trusting the client.
+ * Does nothing when the family has no children or any child has no birthday,
+ * because then "fits no child" cannot be known.
+ */
+export async function disableOutOfAgeTasks(): Promise<{ disabled: number }> {
+  const { supabase, familyId } = await requireFamily();
+
+  const [{ data: children, error: childErr }, { data: tasks, error: taskErr }] = await Promise.all([
+    supabase.from("children").select("date_of_birth").eq("family_id", familyId),
+    supabase
+      .from("tasks")
+      .select("id, min_age, max_age")
+      .eq("family_id", familyId)
+      .eq("active", true)
+      .eq("is_system_template", false),
+  ]);
+  if (childErr) throw childErr;
+  if (taskErr) throw taskErr;
+
+  const ages = (children ?? []).map((c) => ageFromDob(c.date_of_birth as string | null));
+  const ids = tasksFittingNoChild(tasks ?? [], ages).map((t) => t.id as string);
+  if (!ids.length) return { disabled: 0 };
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ active: false })
+    .eq("family_id", familyId)
+    .eq("active", true)
+    .in("id", ids);
+  if (error) throw error;
+
+  revalidatePath("/[locale]/(parent)/tasks", "page");
+  return { disabled: ids.length };
 }

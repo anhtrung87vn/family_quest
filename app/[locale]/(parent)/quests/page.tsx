@@ -8,6 +8,7 @@ import { Collapsible } from "@/components/ui/Collapsible";
 import { createFamilyQuest, contributeToQuest, cancelQuest } from "./actions";
 import { CloneQuestsButton } from "./CloneQuestsButton";
 import { ResetQuestsButton } from "./ResetQuestsButton";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function FamilyQuestsPage({
                     className="h-10 rounded-xl border border-stone-300 px-3 text-sm" />
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="text-amber-600">🪙 {t("common.coins")}</span>
+                  <span className="text-amber-600"><CoinIcon /> {t("common.coins")}</span>
                   <input name="coin_reward" type="number" min="0" defaultValue="20"
                     className="h-10 rounded-xl border border-stone-300 px-3 text-sm" />
                 </label>
@@ -92,14 +93,6 @@ export default async function FamilyQuestsPage({
           </form>
         </Collapsible>
       </Card>
-
-      {/* Reset & reclone quest templates */}
-      <ResetQuestsButton
-        label={t("parent.dangerResetRecloneQuests")}
-        desc={t("parent.dangerResetRecloneQuestsDesc")}
-        confirmLabel={t("parent.dangerResetRecloneConfirm")}
-        cancelLabel={t("parent.dangerCancel")}
-      />
 
       {/* Active quests */}
       {activeQuests.length > 0 && (
@@ -133,10 +126,13 @@ export default async function FamilyQuestsPage({
 
                   <div className="flex flex-wrap items-center gap-2">
                     {q.coin_reward > 0 && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">🪙 {q.coin_reward}</span>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700"><CoinIcon /> {q.coin_reward}</span>
                     )}
                     {q.star_reward > 0 && (
                       <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">⭐ {q.star_reward}</span>
+                    )}
+                    {(q.coin_reward > 0 || q.star_reward > 0) && (
+                      <span className="text-[11px] text-stone-500">{t("parent.perChild")}</span>
                     )}
                     {q.end_date && (
                       <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">📅 {q.end_date}</span>
@@ -158,7 +154,7 @@ export default async function FamilyQuestsPage({
                   )}
 
                   {/* Contribute buttons */}
-                  {children?.length && (
+                  {!!children?.length && (
                     <div className="flex flex-wrap gap-2 border-t border-pink-200 pt-3">
                       {children.map((c) => (
                         <form key={c.id} action={contributeToQuest}>
@@ -190,8 +186,9 @@ export default async function FamilyQuestsPage({
                     <h3 className="font-medium text-stone-800">{q.title}</h3>
                     <div className="mt-0.5 text-xs text-stone-400">
                       {q.target_count} / {q.target_count}
-                      {q.coin_reward > 0 && ` · 🪙 ${q.coin_reward}`}
+                      {q.coin_reward > 0 && <> · <CoinIcon /> {q.coin_reward}</>}
                       {q.star_reward > 0 && ` · ⭐ ${q.star_reward}`}
+                      {(q.coin_reward > 0 || q.star_reward > 0) && ` ${t("parent.perChild")}`}
                     </div>
                   </div>
                   <span className="text-lg">🎉</span>
@@ -212,6 +209,14 @@ export default async function FamilyQuestsPage({
           />
         </Card>
       )}
+
+      {/* Rarely used, destructive actions — collapsed at the bottom */}
+      <ResetQuestsButton
+        manageLabel={t("parent.manage")}
+        label={t("parent.dangerResetRecloneQuests")}
+        desc={t("parent.dangerResetRecloneQuestsDesc")}
+        confirmPrompt={t("parent.dangerConfirmPrompt")}
+      />
     </div>
   );
 }

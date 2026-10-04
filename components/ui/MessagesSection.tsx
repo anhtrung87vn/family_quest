@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { ParentMessageMedia } from "@/components/ui/ParentMessageMedia";
+import { timeAgo } from "@/lib/time-ago";
 
 interface Message {
   id: string;
@@ -28,16 +30,11 @@ interface MessagesSectionProps {
   clearAllAction?: () => Promise<void>;
 }
 
-function timeAgo(createdAt: string): string {
-  const diff = Date.now() - new Date(createdAt).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins} phút trước`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} giờ trước`;
-  return `${Math.floor(hrs / 24)} ngày trước`;
-}
+/** Localized "5 minutes ago" / "5 phút trước" for a past timestamp. */
 
 export function MessagesSection({ messages, unreadCount, taskNameMap, markReadAction, reactAction, unreadIds, title, markReadLabel, clearAllAction }: MessagesSectionProps) {
+  const t = useTranslations();
+  const locale = useLocale();
   const [collapsed, setCollapsed] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -63,10 +60,10 @@ export function MessagesSection({ messages, unreadCount, taskNameMap, markReadAc
               confirmClear ? (
                 <form action={clearAllAction} className="flex items-center gap-1">
                   <button type="submit" className="rounded-full bg-red-400 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-red-500">
-                    Xóa hết ✓
+                    {t("child.messagesClearAll")} ✓
                   </button>
                   <button type="button" onClick={() => setConfirmClear(false)} className="text-[10px] text-stone-400 hover:text-stone-600">
-                    Huỷ
+                    {t("common.cancel")}
                   </button>
                 </form>
               ) : (
@@ -75,7 +72,7 @@ export function MessagesSection({ messages, unreadCount, taskNameMap, markReadAc
                   onClick={() => setConfirmClear(true)}
                   className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-400 hover:bg-red-50 hover:text-red-400"
                 >
-                  🗑 Xóa
+                  🗑 {t("child.messagesClear")}
                 </button>
               )
             )}
@@ -100,8 +97,8 @@ export function MessagesSection({ messages, unreadCount, taskNameMap, markReadAc
                     className={`rounded-xl p-3 ${msg.read_at ? "bg-white/60" : "bg-white shadow-sm ring-1 ring-pink-200"}`}
                   >
                     <div className="mb-1 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold text-pink-600">❤️ Bố/Mẹ</span>
-                      <span className="text-[10px] text-stone-400">{timeAgo(msg.created_at)}</span>
+                      <span className="text-xs font-semibold text-pink-600">❤️ {t("child.messagesFromParent")}</span>
+                      <span className="text-[10px] text-stone-400" suppressHydrationWarning>{timeAgo(msg.created_at, locale)}</span>
                       {msg.message_type === "QUEST_APPROVAL" && taskName && (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
                           ✅ {taskName}
@@ -141,7 +138,7 @@ export function MessagesSection({ messages, unreadCount, taskNameMap, markReadAc
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-1.5 text-xs text-stone-400">Con đã phản hồi {msg.reaction}</div>
+                      <div className="mt-1.5 text-xs text-stone-400">{t("child.messagesReacted", { reaction: msg.reaction })}</div>
                     )}
                   </div>
                 );

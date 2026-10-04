@@ -1,16 +1,22 @@
 // Badge checker — called after task approval to award any newly earned badges.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { grantStars } from "@/lib/ledger";
 
 export async function checkAndAwardBadges(childId: string): Promise<string[]> {
   const admin = createAdminClient();
   const newBadges: string[] = [];
 
-  // Get all badges the child hasn't earned yet
-  const { data: unearned } = await admin
-    .from("badges")
-    .select("id, slug, condition_type, condition_value, star_bonus, icon, name_en")
-    .not("id", "in", `(select badge_id from child_badges where child_id = '${childId}')`);
+  // Badges the child hasn't earned yet. PostgREST can't take a sub-select in
+  // an `in` filter, so load the earned ids and filter here.
+  const [{ data: allBadges, error: badgesErr }, { data: earned, error: earnedErr }] = await Promise.all([
+    admin.from("badges").select("id, slug, condition_type, condition_value, star_bonus, icon, name_en"),
+    admin.from("child_badges").select("badge_id").eq("child_id", childId),
+  ]);
+  if (badgesErr) throw badgesErr;
+  if (earnedErr) throw earnedErr;
+  const earnedIds = new Set((earned ?? []).map((e) => e.badge_id));
+  const unearned = (allBadges ?? []).filter((b) => !earnedIds.has(b.id));
 
   if (!unearned?.length) return newBadges;
 
@@ -51,22 +57,13 @@ export async function checkAndAwardBadges(childId: string): Promise<string[]> {
       if (!error) {
         newBadges.push(`${badge.icon} ${badge.name_en}`);
         // Award star bonus
-        if (badge.star_bonus > 0) {
-          await admin.from("star_transactions").insert({
-            child_id: childId,
-            amount: badge.star_bonus,
-            transaction_type: "BADGE_BONUS",
-            reference_id: badge.id,
-            description: `Badge earned: ${badge.name_en}`,
-          });
-          const { data: child } = await admin
-            .from("children").select("lifetime_stars").eq("id", childId).single();
-          if (child) {
-            await admin.from("children").update({
-              lifetime_stars: child.lifetime_stars + badge.star_bonus,
-            }).eq("id", childId);
-          }
-        }
+        await grantStars({
+          childId,
+          amount: badge.star_bonus,
+          transaction_type: "BADGE_BONUS",
+          reference_id: badge.id,
+          description: `Badge earned: ${badge.name_en}`,
+        });
       }
     }
   }

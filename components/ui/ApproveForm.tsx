@@ -17,6 +17,8 @@ interface ApproveFormProps {
     stopRecord: string;
     capture: string;
     cancel: string;
+    cameraError: string;
+    micError: string;
   };
 }
 
@@ -61,7 +63,7 @@ export function ApproveForm({ completionId, quickMessages, labels }: ApproveForm
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
       }, 50);
     } catch {
-      setCamError("Không thể mở camera. Kiểm tra quyền truy cập.");
+      setCamError(labels.cameraError);
     }
   };
 
@@ -122,9 +124,9 @@ export function ApproveForm({ completionId, quickMessages, labels }: ApproveForm
       setRecSeconds(0);
       timerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
     } catch {
-      setCamError("Không thể ghi âm. Kiểm tra quyền truy cập.");
+      setCamError(labels.micError);
     }
-  }, []);
+  }, [labels.micError]);
 
   const stopAudio = useCallback(() => {
     recorderRef.current?.stop();
@@ -287,7 +289,7 @@ export function ApproveForm({ completionId, quickMessages, labels }: ApproveForm
       {photoPreview && (
         <div className="relative w-fit">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photoPreview} alt="Preview" className="max-h-28 rounded-lg object-cover" />
+          <img src={photoPreview} alt="" className="max-h-28 rounded-lg object-cover" />
           <button
             type="button"
             onClick={clearPhoto}

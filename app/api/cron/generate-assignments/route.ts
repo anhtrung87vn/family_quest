@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseRule, dueOn, todayISO } from "@/lib/recurrence";
+import { awardResponsibilityWeek } from "@/lib/responsibility-week";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +18,15 @@ export async function POST(req: Request) {
   const today = todayISO();
   const now = new Date();
 
+  // Weekly responsibility stars for last week (idempotent, so daily is fine).
+  // Non-critical: a failure here must not hide the assignment result.
+  let responsibilityWeek: { week: string; awarded: number } | null = null;
+  try {
+    responsibilityWeek = await awardResponsibilityWeek(now);
+  } catch (err) {
+    console.error("[generate-assignments] responsibility week stars failed", err);
+  }
+
   // Fetch active recurring tasks
   const { data: tasks, error: tErr } = await admin
     .from("tasks")
@@ -32,7 +42,7 @@ export async function POST(req: Request) {
   });
 
   if (!dueTasks.length) {
-    return NextResponse.json({ ok: true, inserted: 0, skipped: 0 });
+    return NextResponse.json({ ok: true, inserted: 0, skipped: 0, responsibilityWeek });
   }
 
   const dueTaskIds = dueTasks.map((t) => t.id);
@@ -86,7 +96,7 @@ export async function POST(req: Request) {
     inserted = rows.length;
   }
 
-  return NextResponse.json({ ok: true, inserted, skipped });
+  return NextResponse.json({ ok: true, inserted, skipped, responsibilityWeek });
 }
 
 // Allow GET for manual trigger (still needs secret).

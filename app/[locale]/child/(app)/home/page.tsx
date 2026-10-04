@@ -6,20 +6,20 @@ import { todayISO } from "@/lib/recurrence";
 import { getLevelInfo, LEVELS } from "@/lib/levels";
 import { getStreak } from "@/lib/streaks";
 import { taskStyle, levelIcon, behaviorStyle, stageStyle } from "@/lib/category-style";
-import { submitTaskAction, claimChoiceQuestAction, refreshPoolAction, markMessagesReadAction, reactToMessageAction, revokeAssignmentAction, clearAllMessagesAction, resolveRepairAction } from "../actions";
-import { redirect } from "@/lib/i18n/routing";
+import { markMessagesReadAction, reactToMessageAction, revokeAssignmentAction, clearAllMessagesAction, resolveRepairAction } from "../actions";
+import { Link, redirect } from "@/lib/i18n/routing";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { EvidenceCapture } from "@/components/ui/EvidenceCapture";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { MessagesSection } from "@/components/ui/MessagesSection";
 import { ChildGuide } from "@/components/ui/ChildGuide";
 import { SwipeToRevoke } from "@/components/ui/SwipeToRevoke";
 import { Collapsible } from "@/components/ui/Collapsible";
-import { rankTemplates, poolSizeForAge } from "@/lib/recommendations";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { RepairSection } from "@/components/ui/RepairSection";
+import { CoinIcon } from "@/components/ui/CoinIcon";
+import { TodayEmptyState } from "@/components/ui/KidEmptyState";
+import { familyDayStart, mondayOfISO } from "@/lib/family-time";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +37,6 @@ export default async function ChildHome({
   const admin = createAdminClient();
   const today = todayISO();
 
-  type PoolTask = { id: string; name: string; name_vi?: string | null; description?: string | null; description_vi?: string | null; category: string | null; coin_reward: number; star_reward: number; requires_approval: boolean; behavior_type?: string; min_age?: number | null; max_age?: number | null };
-  type ClaimedPoolQuest = { id: string; status: string; task: PoolTask | null };
   type TaskWithBehavior = { id: string; name: string; category: string | null; coin_reward: number; star_reward: number; behavior_type?: string };
 
   let todos: { id: string; status: string; task: unknown }[] | null = null;
@@ -46,7 +44,8 @@ export default async function ChildHome({
   let lifetimeStars = 0;
   let dreamRewardId: string | null = null;
   let streak = { current: 0, longest: 0 };
-  let weeklyDone: number | null = 0;
+  let weeklyDone = 0;
+  let doneToday = 0;
   let dreamReward: { name: string; coin_cost: number } | null = null;
   let fetchError = false;
   let childRowData: { lifetime_stars?: number; current_dream_reward_id?: string | null; family_id?: string; date_of_birth?: string | null } | null = null;
@@ -57,13 +56,9 @@ export default async function ChildHome({
   let unreadCount = 0;
   const taskNameMap = new Map<string, string>();
 
-  // Quest Pool state
-  let poolTasks: PoolTask[] = [];
-  let claimedPoolToday: ClaimedPoolQuest[] = [];
-  let poolMaxPerDay = 1;
-  let claimsToday = 0;
-  let canRefresh = true;
-  const POOL_DISPLAY_SIZE = 4;
+  // Quest Pool summary — the pool itself lives on the Quests tab
+  let poolAvailable = false;
+  let claimedAssignmentIds = new Set<string>();
 
   try {
     // Fetch tasks independently so ECONNRESET on other queries doesn't blank the task list
@@ -93,16 +88,19 @@ export default async function ChildHome({
       if (dr) dreamReward = dr;
     }
 
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-    const weekStartISO = weekStart.toISOString().slice(0, 10);
-    const { count } = await admin
-      .from("task_assignments")
-      .select("id", { count: "exact", head: true })
-      .eq("child_id", session.childId)
-      .eq("status", "approved")
-      .gte("due_date", weekStartISO);
-    weeklyDone = count;
+    // Quests done this week (Monday start) and today: every submission that was
+    // not rejected, so a quest waiting for approval already counts — same as the streak.
+    const todayStart = familyDayStart(today);
+    const weekStart = familyDayStart(mondayOfISO(today));
+    const { data: weekComps, error: weekErr } = await admin
+      .from("task_completions")
+      .select("submitted_at, task_assignments!inner(child_id)")
+      .eq("task_assignments.child_id", session.childId)
+      .neq("status", "rejected")
+      .gte("submitted_at", weekStart.toISOString());
+    if (weekErr) console.error("[ChildHome] weekly completions fetch:", weekErr);
+    weeklyDone = weekComps?.length ?? 0;
+    doneToday = (weekComps ?? []).filter((c) => new Date(c.submitted_at).getTime() >= todayStart.getTime()).length;
 
     // --- Recent parent messages ---
     if (familyId) {
@@ -143,78 +141,25 @@ export default async function ChildHome({
       }
     }
 
-    // --- Quest Pool (age-aware ranking when child has date_of_birth) ---
+    // --- Quest Pool availability (age-filtered); the pool itself is on the Quests tab ---
     if (familyId) {
-      // Reuse date_of_birth from initial childRow query (no extra DB call)
       const childAge = ageFromDob(childRowData?.date_of_birth);
-
-      const [cfgRes, claimsRes, refreshRes, poolRes] = await Promise.all([
-        admin.from("child_pool_config").select("max_claims_per_day, pool_size").eq("child_id", session.childId).maybeSingle(),
+      const [cfgRes, claimsRes, poolRes] = await Promise.all([
+        admin.from("child_pool_config").select("max_claims_per_day").eq("child_id", session.childId).maybeSingle(),
         admin.from("pool_claims").select("task_id, assignment_id").eq("child_id", session.childId).eq("claimed_date", today),
-        admin.from("pool_refresh_log").select("id").eq("child_id", session.childId).eq("refresh_date", today).maybeSingle(),
         admin.from("tasks")
-          .select("id, name, name_vi, description, description_vi, category, coin_reward, star_reward, requires_approval, behavior_type, skill_domain, recommended_age, min_age, max_age, independence_level, difficulty, availability_type")
+          .select("id, min_age, max_age")
           .eq("family_id", familyId)
           .eq("in_pool", true)
           .eq("active", true),
       ]);
-
-      poolMaxPerDay = cfgRes.data?.max_claims_per_day ?? 1;
-      const configPoolSize = cfgRes.data?.pool_size ?? POOL_DISPLAY_SIZE;
-      const displaySize = childAge != null ? poolSizeForAge(childAge) : configPoolSize;
-      canRefresh = !refreshRes.data;
-
-      const claimedTaskIds = new Set((claimsRes.data ?? []).map((c) => c.task_id));
-      const claimedAssignmentIds = (claimsRes.data ?? []).map((c) => c.assignment_id);
-      claimsToday = claimedTaskIds.size;
-
-      // Pool tasks: drop claimed and out-of-age quests, then rank by age if available
-      const allPool: PoolTask[] = (poolRes.data ?? []) as PoolTask[];
-      const unclaimed = allPool.filter((t) => !claimedTaskIds.has(t.id) && isAgeEligible(t, childAge));
-
-      if (childAge != null && unclaimed.length > displaySize) {
-        // Fetch recent completions for ranking (last 14 days)
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-        const { data: recentComps } = await admin
-          .from("task_completions")
-          .select("assignment:task_assignments(task:tasks(name, skill_domain)), completed_at")
-          .eq("assignment.child_id", session.childId)
-          .gte("completed_at", twoWeeksAgo.toISOString());
-
-        const recentCompletions = (recentComps ?? []).map((c: any) => {
-          const assignment = Array.isArray(c.assignment) ? c.assignment[0] : c.assignment;
-          const task = assignment?.task;
-          const taskObj = Array.isArray(task) ? task[0] : task;
-          return {
-            task_name: taskObj?.name ?? "",
-            skill_domain: taskObj?.skill_domain ?? null,
-            completed_at: c.completed_at ?? "",
-          };
-        });
-
-        const ranked = rankTemplates(
-          unclaimed as any,
-          {
-            childAge,
-            recentCompletions,
-            activeTaskNames: new Set(unclaimed.map((t) => t.name)),
-            limit: displaySize,
-          }
-        );
-        poolTasks = ranked as unknown as PoolTask[];
-      } else {
-        poolTasks = unclaimed.slice(0, displaySize);
-      }
-
-      // Claimed pool assignments already in today's task list
-      if (claimedAssignmentIds.length > 0) {
-        const { data: claimedRows } = await admin
-          .from("task_assignments")
-          .select("id, status, task:tasks(id, name, category, coin_reward, star_reward, requires_approval)")
-          .in("id", claimedAssignmentIds);
-        claimedPoolToday = (claimedRows ?? []) as unknown as ClaimedPoolQuest[];
-      }
+      const poolMaxPerDay = cfgRes.data?.max_claims_per_day ?? 1;
+      const claimedTaskIds = new Set((claimsRes.data ?? []).map((c) => c.task_id as string));
+      claimedAssignmentIds = new Set((claimsRes.data ?? []).map((c) => c.assignment_id as string));
+      const eligibleUnclaimed = (poolRes.data ?? []).filter(
+        (pt) => !claimedTaskIds.has(pt.id) && isAgeEligible(pt, childAge),
+      ).length;
+      poolAvailable = claimedTaskIds.size < poolMaxPerDay && eligibleUnclaimed > 0;
     }
   } catch (e) {
     console.error("[ChildHome] data fetch failed:", e);
@@ -263,22 +208,25 @@ export default async function ChildHome({
   // Separate submitted (pending approval) from actionable tasks
   const actionable = (todos ?? []).filter((a) => a.status === "todo" || a.status === "rejected");
   const submitted = (todos ?? []).filter((a) => a.status === "submitted");
+  const nothingActionable = actionable.length === 0;
 
-  // Group actionable tasks by behavior type
-  const responsibilities = actionable.filter((a) => {
+  // Quests picked from the pool today get their own section; the rest are grouped by behavior type
+  const claimedActionable = actionable.filter((a) => claimedAssignmentIds.has(a.id));
+  const assignedActionable = actionable.filter((a) => !claimedAssignmentIds.has(a.id));
+  const responsibilities = assignedActionable.filter((a) => {
     const task = Array.isArray(a.task) ? a.task[0] : a.task;
     return (task as any)?.behavior_type === "responsibility";
   });
-  const habitBuilding = actionable.filter((a) => {
+  const habitBuilding = assignedActionable.filter((a) => {
     const task = Array.isArray(a.task) ? a.task[0] : a.task;
     return (task as any)?.behavior_type === "habit_building";
   });
-  const characterFamily = actionable.filter((a) => {
+  const characterFamily = assignedActionable.filter((a) => {
     const task = Array.isArray(a.task) ? a.task[0] : a.task;
     const bt = (task as any)?.behavior_type;
     return bt === "character" || bt === "family";
   });
-  const coreTasks = actionable.filter((a) => {
+  const coreTasks = assignedActionable.filter((a) => {
     const task = Array.isArray(a.task) ? a.task[0] : a.task;
     const bt = (task as any)?.behavior_type;
     return !bt || bt === "challenge";
@@ -346,6 +294,14 @@ export default async function ChildHome({
     { value: "fun", emoji: "🎉", label: t("child.choiceFun") },
     { value: "proud", emoji: "🌟", label: t("child.choiceProud") },
   ];
+
+  const todayEmptyLabels = {
+    celebrateTitle: t("child.emptyTodayTitle"),
+    celebrateDesc: t("child.emptyTodayDesc"),
+    noQuestsTitle: t("child.noQuestsYetTitle"),
+    pickFromPool: t("child.pickFromPoolBtn"),
+    askParent: t("child.askParentForQuests"),
+  };
 
   const guideLabels = {
     title: t("child.guideTitle"),
@@ -423,20 +379,20 @@ export default async function ChildHome({
       {/* 🌈 Dream Reward Hero — always visible when set */}
       {dreamReward && (
         <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-4 text-white shadow-lg">
-          <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-indigo-200">
+          <div className="mb-0.5 text-[13px] font-semibold uppercase tracking-wide text-indigo-100">
             🌈 {t("child.myDream")}
           </div>
           <div className="mb-2 text-base font-bold">{dreamReward.name}</div>
           <ProgressBar value={coin} max={dreamReward.coin_cost} color="amber" size="md" showPct />
-          <div className="mt-1.5 flex items-center justify-between text-xs">
-            <span>🪙 {coin.toLocaleString()}</span>
+          <div className="mt-1.5 flex items-center justify-between text-[13px]">
+            <span><CoinIcon /> {coin.toLocaleString()}</span>
             <span className="font-semibold">
               {coin >= dreamReward.coin_cost
                 ? `🎉 ${t("child.dreamReady")}!`
                 : `${(dreamReward.coin_cost - coin).toLocaleString()} ${t("child.dreamMore")}`
               }
             </span>
-            <span>🪙 {dreamReward.coin_cost.toLocaleString()}</span>
+            <span><CoinIcon /> {dreamReward.coin_cost.toLocaleString()}</span>
           </div>
         </section>
       )}
@@ -474,7 +430,7 @@ export default async function ChildHome({
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-stone-800 truncate">{localName(task)}</div>
                           {localDesc(task) && (
-                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                            <div className="text-[13px] text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
                           )}
                         </div>
                       </div>
@@ -500,7 +456,7 @@ export default async function ChildHome({
             trigger={
               <h2 className="flex items-center gap-2 text-base font-bold text-emerald-700">
                 🌱 {t("child.responsibilities")}
-                <span className="text-xs font-normal text-stone-400">({responsibilities.length})</span>
+                <span className="text-[13px] font-normal text-stone-500">({responsibilities.length})</span>
               </h2>
             }
             defaultOpen={false}
@@ -538,20 +494,20 @@ export default async function ChildHome({
                     <div>
                       <div className="font-semibold text-stone-800">{localName(task)}</div>
                       {localDesc(task) && (
-                        <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                        <div className="text-[13px] text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
                       )}
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-medium ${stg.color}`}>
+                        <span className={`text-[13px] font-medium ${stg.color}`}>
                           {stg.icon} {locale === "vi" ? stg.label_vi : stg.label_en}
                         </span>
                         {progress && (
-                          <span className="text-[10px] text-stone-400">· {progress.completions}x</span>
+                          <span className="text-[13px] text-stone-500">· {progress.completions}x</span>
                         )}
                       </div>
                       {!isGraduated && (
-                        <div className="mt-1 flex items-center gap-2 text-xs">
+                        <div className="mt-1 flex items-center gap-2 text-sm">
                           {stage !== "stars_only" && stage !== "graduated" && (
-                            <span className="font-medium text-amber-600">🪙 +{stage === "reduced_reward" ? Math.max(Math.floor(task?.coin_reward * 0.4), 0) : task?.coin_reward}</span>
+                            <span className="font-medium text-amber-600"><CoinIcon /> +{stage === "reduced_reward" ? Math.max(Math.floor(task?.coin_reward * 0.4), 0) : task?.coin_reward}</span>
                           )}
                           {task?.star_reward && stage !== "graduated" ? (
                             <span className="font-medium text-purple-600">⭐ +{stage === "stars_only" ? Math.max(Math.floor(task.star_reward * 0.5), 1) : task.star_reward}</span>
@@ -559,7 +515,7 @@ export default async function ChildHome({
                         </div>
                       )}
                       {isGraduated && (
-                        <div className="mt-1 text-xs text-emerald-600 font-medium">🎓 {t("child.habitGraduated")}</div>
+                        <div className="mt-1 text-sm text-emerald-600 font-medium">🎓 {t("child.habitGraduated")}</div>
                       )}
                     </div>
                   </div>
@@ -581,20 +537,19 @@ export default async function ChildHome({
         </section>
       )}
 
-      {/* 🎯 Core Quests / My Priorities (teen) */}
+      {/* 🎯 Core Quests / My Priorities (teen) — also hosts the empty state when nothing is left today */}
+      {(coreTasks.length > 0 || nothingActionable) && (
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
           🎯 {isTeen ? t("child.myPriorities") : t("child.coreQuests")}
         </h2>
-        {!coreTasks.length && !responsibilities.length && !habitBuilding.length && !characterFamily.length ? (
-          <Card className="border-emerald-200 bg-emerald-50">
-            <EmptyState
-              icon="🎉"
-              title={t("child.emptyTodayTitle")}
-              description={t("child.emptyTodayDesc")}
-            />
-          </Card>
-        ) : coreTasks.length === 0 ? null : (
+        {nothingActionable ? (
+          <TodayEmptyState
+            celebrate={doneToday > 0}
+            poolHref={poolAvailable ? "/child/quests#pool" : null}
+            labels={todayEmptyLabels}
+          />
+        ) : (
           <ul className="space-y-3">
             {coreTasks.map((a) => {
               const task = Array.isArray(a.task) ? a.task[0] : a.task;
@@ -608,19 +563,19 @@ export default async function ChildHome({
                         <div>
                           <div className="font-semibold text-stone-800">{localName(task)}</div>
                           {localDesc(task) && (
-                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                            <div className="text-[13px] text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
                           )}
-                          <div className="flex items-center gap-2 text-xs mt-0.5">
+                          <div className="flex flex-wrap items-center gap-2 text-sm mt-0.5">
                             <span className={`font-medium ${cat.color}`}>{t(`tasks.cat.${task?.category ?? "learning"}`)}</span>
                             {/* Teens: de-emphasize coins, emphasize stars */}
                             {isTeen ? (
                               <>
                                 {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
-                                {task?.coin_reward ? <span className="text-stone-400">🪙 +{task.coin_reward}</span> : null}
+                                {task?.coin_reward ? <span className="text-stone-400"><CoinIcon /> +{task.coin_reward}</span> : null}
                               </>
                             ) : (
                               <>
-                                <span className="font-medium text-amber-600">🪙 +{task?.coin_reward}</span>
+                                <span className="font-medium text-amber-600"><CoinIcon /> +{task?.coin_reward}</span>
                                 {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
                               </>
                             )}
@@ -644,8 +599,9 @@ export default async function ChildHome({
           </ul>
         )}
       </section>
+      )}
 
-      {/* � Character & Family — good deeds */}
+      {/* 💎 Character & Family — good deeds */}
       {characterFamily.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-purple-700">
@@ -664,11 +620,11 @@ export default async function ChildHome({
                     <div>
                       <div className="font-semibold text-stone-800">{localName(task)}</div>
                       {localDesc(task) && (
-                        <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                        <div className="text-[13px] text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
                       )}
-                      <div className="flex items-center gap-2 text-xs mt-0.5">
+                      <div className="flex flex-wrap items-center gap-2 text-sm mt-0.5">
                         <span className={`font-medium ${bStyle.color}`}>{locale === "vi" ? bStyle.label_vi : bStyle.label_en}</span>
-                        {task?.coin_reward > 0 && <span className="font-medium text-amber-600">🪙 +{task.coin_reward}</span>}
+                        {task?.coin_reward > 0 && <span className="font-medium text-amber-600"><CoinIcon /> +{task.coin_reward}</span>}
                         {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
                       </div>
                     </div>
@@ -690,158 +646,46 @@ export default async function ChildHome({
       )}
 
       {/* ✨ Claimed Choice Quests (already picked today, actionable) */}
-      {claimedPoolToday.filter((a) => a.status === "todo" || a.status === "rejected").length > 0 && (
+      {claimedActionable.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-violet-700">
             ✨ {t("child.choiceQuestsSection")}
           </h2>
           <ul className="space-y-3">
-            {claimedPoolToday
-              .filter((a) => a.status === "todo" || a.status === "rejected")
-              .map((a) => {
-                const task = Array.isArray(a.task) ? a.task[0] : a.task;
-                const cat = taskStyle(task?.category);
-                return (
-                  <li key={a.id} className={`rounded-2xl border ${cat.border} ${cat.bg} p-4 shadow-sm`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{cat.icon}</span>
-                          <div>
-                            <div className="font-semibold text-stone-800">{localName(task)}</div>
-                            {localDesc(task) && (
-                              <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
-                            )}
-                            <div className="text-[10px] font-medium text-violet-500">✨ {t("child.pickAQuest")}</div>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-3 text-sm">
-                          <span className="font-medium text-amber-600">🪙 +{task?.coin_reward}</span>
-                          {task?.star_reward ? (
-                            <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <EvidenceCapture
-                        assignmentId={a.id}
-                        evidenceType={(task as any)?.evidence_type ?? "none"}
-                        evidenceRequired={(task as any)?.evidence_required ?? false}
-                        maxAudioSeconds={(task as any)?.max_audio_seconds ?? 30}
-                        labels={evidenceLabels}
-                        choices={evidenceChoices}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-          </ul>
-        </section>
-      )}
-
-      {/* ✨ Quest Pool — Pick a Quest */}
-      {poolTasks.length > 0 || claimsToday < poolMaxPerDay ? (
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-bold text-violet-700">
-              ✨ {isTeen ? t("child.chooseChallenge") : t("child.pickAQuest")}
-            </h2>
-            {claimsToday < poolMaxPerDay && poolTasks.length > 0 && (
-              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-600">
-                {t("child.pickAQuestSub", { n: poolMaxPerDay - claimsToday })}
-              </span>
-            )}
-          </div>
-
-          {claimsToday >= poolMaxPerDay ? (
-            <Card className="border-violet-200 bg-violet-50">
-              <div className="flex flex-col items-center gap-1 py-2 text-center">
-                <span className="text-2xl">🎉</span>
-                <p className="text-sm font-semibold text-violet-700">{t("child.poolLimitReached")}</p>
-              </div>
-            </Card>
-          ) : poolTasks.length === 0 ? (
-            <Card>
-              <p className="py-2 text-center text-sm text-stone-400">{t("child.poolEmpty")}</p>
-            </Card>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                {poolTasks.map((task) => {
-                  const cat = taskStyle(task.category);
-                  return (
-                    <div
-                      key={task.id}
-                      className={`flex flex-col justify-between rounded-2xl border ${cat.border} ${cat.bg} p-3.5 shadow-sm`}
-                    >
-                      <div className="mb-3">
-                        <div className="mb-1 flex items-center gap-1.5">
-                          <span className="text-lg">{cat.icon}</span>
-                          <span className="text-xs font-semibold text-stone-700 leading-tight">
-                            {(locale === "vi" && task.name_vi) ? task.name_vi : task.name}
-                          </span>
-                        </div>
-                        {((locale === "vi" && task.description_vi) ? task.description_vi : task.description) && (
-                          <div className="text-[10px] text-stone-500 line-clamp-2 mb-1">
-                            {(locale === "vi" && task.description_vi) ? task.description_vi : task.description}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="font-medium text-amber-600">🪙 +{task.coin_reward}</span>
-                          {task.star_reward ? (
-                            <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <form action={claimChoiceQuestAction}>
-                        <input type="hidden" name="task_id" value={task.id} />
-                        <Button
-                          type="submit"
-                          size="sm"
-                          className="w-full bg-violet-500 text-xs font-bold text-white hover:bg-violet-600"
-                        >
-                          {t("child.claimBtn")}
-                        </Button>
-                      </form>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Refresh button — 1/day */}
-              <div className="mt-2 flex justify-center">
-                {canRefresh ? (
-                  <form action={refreshPoolAction}>
-                    <button
-                      type="submit"
-                      className="flex items-center gap-1 rounded-full px-3 py-1 text-xs text-stone-400 hover:text-violet-500 transition-colors"
-                    >
-                      🔄 {t("child.refreshPool")}
-                    </button>
-                  </form>
-                ) : (
-                  <span className="text-xs text-stone-300">{t("child.refreshedToday")}</span>
-                )}
-              </div>
-            </>
-          )}
-        </section>
-      ) : null}
-
-      {/* ⏳ Submitted — waiting for approval */}
-      {submitted.length > 0 && (
-        <section>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-600">
-            ⏳ {t("child.waitingSection")}
-          </h2>
-          <ul className="space-y-1.5">
-            {submitted.map((a) => {
+            {claimedActionable.map((a) => {
               const task = Array.isArray(a.task) ? a.task[0] : a.task;
               const cat = taskStyle(task?.category);
               return (
-                <li key={a.id} className="flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-stone-500">
-                  <span>{cat.icon}</span>
-                  <span className="flex-1">{localName(task)}</span>
-                  <span className="text-xs text-amber-500">⏳ {t("child.waiting")}</span>
+                <li key={a.id} className={`rounded-2xl border ${cat.border} ${cat.bg} p-4 shadow-sm`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{cat.icon}</span>
+                        <div>
+                          <div className="font-semibold text-stone-800">{localName(task)}</div>
+                          {localDesc(task) && (
+                            <div className="text-[13px] text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                          )}
+                          <div className="text-[13px] font-medium text-violet-600">✨ {t("child.pickAQuest")}</div>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-sm">
+                        <span className="font-medium text-amber-600"><CoinIcon /> +{task?.coin_reward}</span>
+                        {task?.star_reward ? (
+                          <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <EvidenceCapture
+                      assignmentId={a.id}
+                      evidenceType={(task as any)?.evidence_type ?? "none"}
+                      evidenceRequired={(task as any)?.evidence_required ?? false}
+                      maxAudioSeconds={(task as any)?.max_audio_seconds ?? 30}
+                      evidenceBadgeLabel={evidenceBadge((task as any)?.evidence_type, (task as any)?.evidence_required ?? false, (task as any)?.max_audio_seconds ?? 30)}
+                      labels={evidenceLabels}
+                      choices={evidenceChoices}
+                    />
+                  </div>
                 </li>
               );
             })}
@@ -849,16 +693,40 @@ export default async function ChildHome({
         </section>
       )}
 
+      {/* ✨ Quest Pool entry — the pool lives on the Quests tab (the empty state above has its own big button) */}
+      {poolAvailable && !nothingActionable && (
+        <Link
+          href="/child/quests#pool"
+          className="flex min-h-11 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+        >
+          <span>✨</span>
+          <span className="flex-1">{t("child.pickFromPoolBtn")}</span>
+          <span aria-hidden="true">→</span>
+        </Link>
+      )}
+
+      {/* ⏳ Waiting for approval — one-line summary; the full list is on the Quests tab */}
+      {submitted.length > 0 && (
+        <Link
+          href="/child/quests#waiting"
+          className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+        >
+          <span>⏳</span>
+          <span className="flex-1">{t("child.waitingSummary", { n: submitted.length })}</span>
+          <span aria-hidden="true">→</span>
+        </Link>
+      )}
+
       {/* 🔥 Weekly Journey */}
       <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50">
-        <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-bold text-stone-700">
-            🔥 {t("child.weeklyJourney")}
-          </h3>
-          <span className="text-sm font-semibold text-amber-600">{weeklyDone ?? 0} {t("child.questsDone")}</span>
+        <h3 className="flex items-center gap-2 text-sm font-bold text-stone-700">
+          🔥 {t("child.weeklyJourney")}
+        </h3>
+        <div className="mt-1.5 text-base font-semibold text-amber-700">
+          ✅ {t("child.weeklyDoneCount", { n: weeklyDone })}
         </div>
         {streak.current > 0 && (
-          <div className="mt-2 text-xs text-stone-500">
+          <div className="mt-1 text-sm text-stone-600">
             🔥 {streak.current} {t("child.streakDays")}
             {streak.longest > streak.current && ` · ${t("child.bestStreak")}: ${streak.longest}`}
           </div>
@@ -873,7 +741,7 @@ export default async function ChildHome({
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-stone-700">Lv.{level.level} {levelTitle}</span>
               {level.nextLevelStars && (
-                <span className="text-xs text-stone-400">{lifetimeStars} / {level.nextLevelStars} ⭐</span>
+                <span className="text-[13px] text-stone-500">{lifetimeStars} / {level.nextLevelStars} ⭐</span>
               )}
             </div>
             {level.nextLevelStars && (

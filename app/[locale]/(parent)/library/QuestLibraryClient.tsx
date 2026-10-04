@@ -8,6 +8,7 @@ import { domainStyle, independenceStyle, ALL_SKILL_DOMAINS } from "@/lib/categor
 import type { SkillDomain } from "@/lib/category-style";
 import { ageFromDob } from "@/lib/age";
 import { copyTemplateToFamily } from "./actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 interface Template {
   id: string;
@@ -68,7 +69,10 @@ export function QuestLibraryClient({
   const existingSet = useMemo(() => new Set(existingNames), [existingNames]);
 
   // Filters
-  const [selectedChild, setSelectedChild] = useState<string>("");
+  // Default to the first child with a known age so results are age-matched; "All" stays selectable.
+  const [selectedChild, setSelectedChild] = useState<string>(
+    () => children.find((c) => ageFromDob(c.date_of_birth) != null)?.id ?? "",
+  );
   const [selectedDomain, setSelectedDomain] = useState<string>("");
   const [selectedBehavior, setSelectedBehavior] = useState<string>("");
   const [searchText, setSearchText] = useState("");
@@ -273,16 +277,16 @@ export function QuestLibraryClient({
                           </span>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {ageRange && (
-                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500">
+                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">
                                 {t("parent.libraryAges")} {ageRange}
                               </span>
                             )}
                             {tpl.difficulty && (
-                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500">
-                                {tpl.difficulty}/10
+                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">
+                                {t("parent.libraryDifficulty", { value: tpl.difficulty })}
                               </span>
                             )}
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${indStyle.bg} ${indStyle.color}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${indStyle.bg} ${indStyle.color}`}>
                               {indStyle.icon} {isVi ? indStyle.label_vi : indStyle.label_en}
                             </span>
                           </div>
@@ -299,7 +303,7 @@ export function QuestLibraryClient({
                         {/* Reward info */}
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-                            🪙 {tpl.coin_reward}
+                            <CoinIcon /> {tpl.coin_reward}
                           </span>
                           <span className="rounded-full bg-purple-50 px-2 py-0.5 font-medium text-purple-700">
                             ⭐ {tpl.star_reward}
@@ -319,7 +323,7 @@ export function QuestLibraryClient({
                         {/* Development goal */}
                         {localGoal(tpl) && (
                           <div>
-                            <p className="text-[10px] font-semibold uppercase text-stone-400">{t("parent.libraryWhyMatters")}</p>
+                            <p className="text-[11px] font-semibold uppercase text-stone-400">{t("parent.libraryWhyMatters")}</p>
                             <p className="text-xs text-stone-600">{localGoal(tpl)}</p>
                           </div>
                         )}
@@ -327,7 +331,7 @@ export function QuestLibraryClient({
                         {/* Parent tip */}
                         {localTip(tpl) && (
                           <div>
-                            <p className="text-[10px] font-semibold uppercase text-stone-400">{t("parent.libraryParentTip")}</p>
+                            <p className="text-[11px] font-semibold uppercase text-stone-400">{t("parent.libraryParentTip")}</p>
                             <p className="text-xs text-stone-600">{localTip(tpl)}</p>
                           </div>
                         )}

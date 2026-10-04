@@ -8,6 +8,9 @@ import { createTask } from "./actions";
 import { TaskList } from "./TaskList";
 import { CloneTemplatesButton } from "./CloneTemplatesButton";
 import { DangerZone } from "./DangerZone";
+import { CoinIcon } from "@/components/ui/CoinIcon";
+import { ageFromDob } from "@/lib/age";
+import { tasksFittingNoChild } from "@/lib/task-age-fit";
 
 export default async function TasksPage({
   params,
@@ -19,12 +22,38 @@ export default async function TasksPage({
   const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
 
-  const tasksQ = supabase.from("tasks").select("id, name, description, category, coin_reward, star_reward, active, recurrence_rule, in_pool, behavior_type, availability_type, min_age, recommended_age, max_age").eq("is_system_template", false).eq("active", true).eq("family_id", familyId);
-  const childrenQ = supabase.from("children").select("id, name").eq("family_id", familyId);
+  const tasksQ = supabase.from("tasks").select("id, name, description, category, coin_reward, star_reward, active, recurrence_rule, in_pool, behavior_type, availability_type, min_age, recommended_age, max_age, evidence_type, evidence_required, requires_approval").eq("is_system_template", false).eq("active", true).eq("family_id", familyId);
+  const childrenQ = supabase.from("children").select("id, name, date_of_birth").eq("family_id", familyId);
   const [{ data: tasks }, { data: children }] = await Promise.all([
     tasksQ.order("created_at", { ascending: false }),
     childrenQ.order("created_at"),
   ]);
+
+  const childRows = (children ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    age: ageFromDob(c.date_of_birth as string | null),
+  }));
+  const taskRows = (tasks ?? []).map((task) => ({
+    id: task.id,
+    name: task.name,
+    description: task.description ?? null,
+    category: task.category ?? null,
+    coin_reward: task.coin_reward,
+    star_reward: task.star_reward,
+    active: task.active,
+    recurrence_rule: task.recurrence_rule ?? null,
+    in_pool: !!(task as Record<string, unknown>).in_pool,
+    behavior_type: ((task as Record<string, unknown>).behavior_type as string) ?? "challenge",
+    availability_type: ((task as Record<string, unknown>).availability_type as string) ?? "assigned_only",
+    min_age: ((task as Record<string, unknown>).min_age as number | null) ?? null,
+    recommended_age: ((task as Record<string, unknown>).recommended_age as number | null) ?? null,
+    max_age: ((task as Record<string, unknown>).max_age as number | null) ?? null,
+  }));
+  // Flagged only when every child has a known age (see tasksFittingNoChild).
+  const outOfAgeIds = new Set(
+    tasksFittingNoChild(taskRows, childRows.map((c) => c.age)).map((task) => task.id),
+  );
 
   return (
     <div className="space-y-6">
@@ -97,7 +126,7 @@ export default async function TasksPage({
               </legend>
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 text-sm">
-                  <span className="text-amber-600">🪙</span>
+                  <span className="text-amber-600"><CoinIcon /></span>
                   <span className="text-stone-600">{t("tasks.questCoins")}</span>
                   <input name="coin_reward" type="number" min={0} defaultValue={5}
                     className="h-10 w-20 rounded-xl border border-stone-300 px-3 text-sm" />
@@ -192,23 +221,8 @@ export default async function TasksPage({
         </Card>
       ) : (
         <TaskList
-          tasks={(tasks ?? []).map((task) => ({
-            id: task.id,
-            name: task.name,
-            description: task.description ?? null,
-            category: task.category ?? null,
-            coin_reward: task.coin_reward,
-            star_reward: task.star_reward,
-            active: task.active,
-            recurrence_rule: task.recurrence_rule ?? null,
-            in_pool: !!(task as Record<string, unknown>).in_pool,
-            behavior_type: ((task as Record<string, unknown>).behavior_type as string) ?? "challenge",
-            availability_type: ((task as Record<string, unknown>).availability_type as string) ?? "assigned_only",
-            min_age: ((task as Record<string, unknown>).min_age as number | null) ?? null,
-            recommended_age: ((task as Record<string, unknown>).recommended_age as number | null) ?? null,
-            max_age: ((task as Record<string, unknown>).max_age as number | null) ?? null,
-          }))}
-          children={(children ?? []).map((c) => ({ id: c.id, name: c.name }))}
+          tasks={taskRows.map((task) => ({ ...task, fitsNoChild: outOfAgeIds.has(task.id) }))}
+          children={childRows}
           labels={{
             search: t("tasks.search"),
             noResults: t("tasks.noResults"),

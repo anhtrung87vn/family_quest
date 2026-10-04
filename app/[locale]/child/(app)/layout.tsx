@@ -7,6 +7,9 @@ import { getStreak } from "@/lib/streaks";
 import { ConfettiTrigger } from "@/components/ui/ConfettiTrigger";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { RealtimeRefresher } from "@/components/ui/RealtimeRefresher";
+import { getLevelInfo, avatarFrameFor } from "@/lib/levels";
+import { syncLevelUps } from "@/lib/level-ups";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 export default async function ChildAppLayout({
   children,
@@ -26,7 +29,7 @@ export default async function ChildAppLayout({
   const admin = createAdminClient();
   const { data: c } = await admin
     .from("children")
-    .select("id, name, avatar_url")
+    .select("id, name, avatar_url, lifetime_stars")
     .eq("id", session.childId)
     .single();
   if (!c) {
@@ -39,6 +42,16 @@ export default async function ChildAppLayout({
     getStreak(c.id),
     getTranslations(),
   ]);
+
+  // Record any level reached since the last visit (creates the level gift).
+  // Non-critical — the app must still render if this fails.
+  const lifetimeStars = c.lifetime_stars ?? 0;
+  try {
+    await syncLevelUps(c.id, lifetimeStars);
+  } catch (err) {
+    console.error("[ChildAppLayout] syncLevelUps failed", err);
+  }
+  const frame = avatarFrameFor(getLevelInfo(lifetimeStars).level).className;
 
   const tabLabels = {
     home: t("child.tabs.home"),
@@ -53,9 +66,9 @@ export default async function ChildAppLayout({
       <header className="flex items-center gap-3 px-4 pb-2 pt-[max(env(safe-area-inset-top),12px)]">
         {c.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-amber-300" />
+          <img src={c.avatar_url} alt="" className={`h-11 w-11 rounded-full object-cover ${frame}`} />
         ) : (
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-lg font-bold text-white ring-2 ring-amber-200">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-lg font-bold text-white ${frame}`}>
             {c.name.slice(0, 1)}
           </div>
         )}
@@ -67,7 +80,7 @@ export default async function ChildAppLayout({
         {/* Stat chips */}
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-            🪙 {coin}
+            <CoinIcon /> {coin}
           </span>
           <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-700">
             ⭐ {star}
@@ -82,7 +95,7 @@ export default async function ChildAppLayout({
 
       <ConfettiTrigger />
       <RealtimeRefresher />
-      <main className="flex-1 px-4 pb-24 pt-2">{children}</main>
+      <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-2">{children}</main>
 
       <BottomNav labels={tabLabels} locale={locale} />
     </div>

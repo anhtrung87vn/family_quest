@@ -5,6 +5,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { getLevelInfo } from "@/lib/levels";
 import { Link } from "@/lib/i18n/routing";
 import { getIndependenceTrend, type IndependenceTrend } from "@/lib/responsibility";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -213,7 +214,7 @@ export default async function StatsPage({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-amber-50 p-3 text-center">
-                <div className="text-xl font-bold text-amber-600">🪙 {s.coinBalance}</div>
+                <div className="text-xl font-bold text-amber-600"><CoinIcon /> {s.coinBalance}</div>
                 <div className="text-[11px] text-stone-500">{t("parent.currentBalance")}</div>
               </div>
               <div className="rounded-xl bg-purple-50 p-3 text-center">

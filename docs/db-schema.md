@@ -57,9 +57,15 @@ Storage: `supabase/migrations/0003_storage.sql`.
 - Quest `coin_reward` is derived from effort (minutes, frequency, habit fading), calibrated to ~100 coins/week at age 8 and ~150 at age 11. Responsibilities and character quests stay at 0 coins.
 - Templates cover ages 6–17 evenly (15–19 quests recommended per age, 28–41 eligible rewards per age).
 - "Send by age" (`/kids/[id]/age-pack`) and child creation with a birthday copy age-matched templates into the family via `lib/age-provisioning.ts`.
-- Existing family copies are updated only by the opt-in `supabase/scripts/sync-family-copies-with-templates.sql`, which skips values a parent has edited.
 - 0037: cinema and theme-park rewards are split by ticket type — the base row (ages 6–10) uses the child ticket, the `(11+)` row the adult ticket (VN venues price children by height, ~1.3–1.4m). Kindness quests and household-routine family quests cloned before 0034 are reset to 0 coins.
 - Family quests pay `coin_reward` and `star_reward` to **each contributing child** when the quest completes (`FAMILY_QUEST` ledger rows, `awardFamilyQuest` in `lib/ledger.ts`), once, on the active → completed transition.
+
+## Stars, levels and unlocks (0038)
+
+- Stars are never spent. `children.lifetime_stars` drives 12 levels (thresholds, titles, gifts, frames and themes in `lib/levels.ts`; top level ≈ 3 years at ~35 stars/week).
+- `rewards.min_level` — reward is still paid in coins but locked until the child reaches that level; enforced in `requestRewardAction`.
+- `child_level_ups(child_id, level, reached_at, gifted_at, gifted_by)` — one row per level reached, created lazily by `syncLevelUps` (child layout, Approvals page). Each level has a privilege gift; parents mark it given on Approvals. Levels reached before 0038 were backfilled as given.
+- `star_transactions.transaction_type = 'RESPONSIBILITY_WEEK'` — 1–2 stars for last week's responsibilities (≥5 assigned, ≥70% / ≥90% done), awarded by the daily cron, unique per child and week.
 
 ## Post-MVP (not migrated yet)
 

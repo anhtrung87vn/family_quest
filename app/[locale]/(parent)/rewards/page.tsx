@@ -17,11 +17,20 @@ export default async function RewardsPage({
   setRequestLocale(locale);
   const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
-  const { data: rewards } = await supabase.from("rewards").select("id, name, description, category, coin_cost, stock, active, dream_eligible, image_url, link_url").eq("is_system_template", false).eq("family_id", familyId).order("coin_cost");
+  const { data: rewards } = await supabase
+    .from("rewards")
+    .select("id, name, description, category, coin_cost, stock, active, requires_approval, dream_eligible, image_url, link_url, min_level, min_age, max_age")
+    .eq("is_system_template", false)
+    .eq("family_id", familyId)
+    .order("coin_cost");
 
-  // Separate dream-eligible from normal
-  const dreamRewards = (rewards ?? []).filter((r) => r.dream_eligible);
-  const normalRewards = (rewards ?? []).filter((r) => !r.dream_eligible);
+  const cats = {
+    small: t("rewards.cat.small"),
+    medium: t("rewards.cat.medium"),
+    large: t("rewards.cat.large"),
+    experience: t("rewards.cat.experience"),
+    dream: t("rewards.cat.dream"),
+  };
 
   return (
     <div className="space-y-6">
@@ -44,105 +53,88 @@ export default async function RewardsPage({
             cost: t("rewards.cost"),
             stock: t("rewards.stock"),
             stockHint: t("rewards.stockHint"),
+            minLevel: t("rewards.minLevel"),
+            noLevel: t("rewards.noLevel"),
             requiresApproval: t("rewards.requiresApproval"),
             dreamEligible: t("rewards.dreamEligible"),
             create: t("rewards.create"),
             infoSection: t("tasks.infoSection"),
             costAndStock: t("rewards.costAndStock"),
             options: t("rewards.options"),
-            cats: {
-              small: t("rewards.cat.small"),
-              medium: t("rewards.cat.medium"),
-              large: t("rewards.cat.large"),
-              experience: t("rewards.cat.experience"),
-              dream: t("rewards.cat.dream"),
-            },
+            imageUrl: t("rewards.imageUrl"),
+            linkUrl: t("rewards.linkUrl"),
+            upload: t("rewards.upload"),
+            cats,
           }} />
         </Collapsible>
       </Card>
 
-      {/* Reset & reclone templates */}
-      <ResetRewardsButton
-        label={t("parent.dangerResetRecloneRewards")}
-        desc={t("parent.dangerResetRecloneRewardsDesc")}
-        confirmLabel={t("parent.dangerResetRecloneConfirm")}
-        cancelLabel={t("parent.dangerCancel")}
-      />
-
-      {/* Dream rewards section */}
-      {dreamRewards.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-purple-700">
-            🌈 {t("rewards.dreamRewards")}
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <RewardList
-              rewards={dreamRewards.map((r) => ({
-                id: r.id,
-                name: r.name,
-                description: r.description ?? null,
-                category: r.category ?? null,
-                coin_cost: r.coin_cost,
-                stock: r.stock ?? null,
-                active: r.active,
-                dream_eligible: r.dream_eligible,
-                image_url: r.image_url ?? null,
-                link_url: r.link_url ?? null,
-              }))}
-              labels={{
-                search: "",
-                noResults: "",
-                inactive: t("tasks.inactive"),
-                disable: t("rewards.disable"),
-                enable: t("rewards.enable"),
-              }}
-              hideSearch
-            />
-          </div>
-        </section>
+      {/* Rewards grouped by category, with one search across all sections */}
+      {!rewards?.length ? (
+        <Card>
+          <EmptyState
+            icon="🎁"
+            title={t("rewards.emptyTitle")}
+            description={t("rewards.emptyDesc")}
+          />
+        </Card>
+      ) : (
+        <RewardList
+          rewards={rewards.map((r) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description ?? null,
+            category: r.category ?? null,
+            coin_cost: r.coin_cost,
+            stock: r.stock ?? null,
+            active: r.active,
+            requires_approval: r.requires_approval ?? false,
+            dream_eligible: r.dream_eligible,
+            image_url: r.image_url ?? null,
+            link_url: r.link_url ?? null,
+            min_level: r.min_level ?? null,
+            min_age: r.min_age ?? null,
+            max_age: r.max_age ?? null,
+          }))}
+          labels={{
+            search: t("rewards.search"),
+            noResults: t("rewards.noResults"),
+            clearSearch: t("rewards.clearSearch"),
+            inactive: t("tasks.inactive"),
+            disable: t("rewards.disable"),
+            enable: t("rewards.enable"),
+            edit: t("rewards.edit"),
+            delete: t("rewards.delete"),
+            deleteConfirm: t("rewards.deleteConfirm"),
+            minLevel: t("rewards.minLevel"),
+            noLevel: t("rewards.noLevel"),
+            ages: t("rewards.ages"),
+            dreamGoal: t("rewards.dreamGoal"),
+            uncategorized: t("rewards.uncategorized"),
+            name: t("rewards.name"),
+            description: t("rewards.description"),
+            category: t("rewards.category"),
+            costPlaceholder: t("rewards.costPlaceholder"),
+            stockPlaceholder: t("rewards.stockPlaceholder"),
+            imageUrl: t("rewards.imageUrl"),
+            linkUrl: t("rewards.linkUrl"),
+            upload: t("rewards.upload"),
+            requiresApproval: t("rewards.requiresApproval"),
+            dreamEligible: t("rewards.dreamEligible"),
+            save: t("common.save"),
+            cancel: t("common.cancel"),
+            cats,
+          }}
+        />
       )}
 
-      {/* Available rewards */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
-          🎁 {t("rewards.available")}
-        </h2>
-        {!normalRewards.length && !dreamRewards.length ? (
-          <Card>
-            <EmptyState
-              icon="🎁"
-              title={t("rewards.emptyTitle")}
-              description={t("rewards.emptyDesc")}
-            />
-          </Card>
-        ) : !normalRewards.length ? (
-          <Card>
-            <p className="text-center text-sm text-stone-400">{t("rewards.onlyDreams")}</p>
-          </Card>
-        ) : (
-          <RewardList
-            rewards={normalRewards.map((r) => ({
-              id: r.id,
-              name: r.name,
-              description: r.description ?? null,
-              category: r.category ?? null,
-              coin_cost: r.coin_cost,
-              stock: r.stock ?? null,
-              active: r.active,
-              dream_eligible: r.dream_eligible,
-              image_url: r.image_url ?? null,
-              link_url: r.link_url ?? null,
-            }))}
-            labels={{
-              search: t("rewards.search"),
-              noResults: t("rewards.noResults"),
-              inactive: t("tasks.inactive"),
-              disable: t("rewards.disable"),
-              enable: t("rewards.enable"),
-            }}
-          />
-        )}
-      </section>
+      {/* Rarely used, destructive actions — collapsed at the bottom */}
+      <ResetRewardsButton
+        manageLabel={t("parent.manage")}
+        label={t("parent.dangerResetRecloneRewards")}
+        desc={t("parent.dangerResetRecloneRewardsDesc")}
+        confirmPrompt={t("parent.dangerConfirmPrompt")}
+      />
     </div>
   );
 }

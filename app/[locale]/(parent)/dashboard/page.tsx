@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Link } from "@/lib/i18n/routing";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ export default async function ParentDashboard({
   // Active family quests
   const questsQ = supabase
     .from("family_quests")
-    .select("id, title, current_count, target_count")
+    .select("id, title, current_count, target_count, coin_reward, star_reward")
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(3);
@@ -127,7 +128,7 @@ export default async function ParentDashboard({
                 <div>
                   <div className="text-sm font-bold text-blue-800">{t("parent.pendingApprovals")}</div>
                   <div className="text-xs text-blue-600">
-                    {pendingTasks ?? 0} {t("parent.pendingTasksCount")} · {pendingRewards ?? 0} {t("parent.pendingRewardsCount")}
+                    {t("parent.pendingSummary", { tasks: pendingTasks ?? 0, rewards: pendingRewards ?? 0 })}
                   </div>
                 </div>
               </div>
@@ -173,21 +174,31 @@ export default async function ParentDashboard({
                 {/* Stat chips */}
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                    🪙 {coinBalance}
+                    <CoinIcon /> {coinBalance}
                   </span>
                   <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-700">
                     ⭐ {b?.star_balance ?? 0}
                   </span>
                 </div>
 
-                {/* Today progress */}
-                {todayTotal > 0 && (
+                {/* Today progress — always rendered so kid cards keep the same layout */}
+                {todayTotal > 0 ? (
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs text-stone-500">
                       <span>🎯 {t("parent.todayProgress")}</span>
                       <span className="font-semibold text-stone-700">{todayDone} / {todayTotal}</span>
                     </div>
                     <ProgressBar value={todayDone} max={todayTotal} color="emerald" size="sm" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-stone-400">🎯 {t("parent.noTasksToday")}</span>
+                    <Link
+                      href={`/kids/${c.id}/age-pack`}
+                      className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-200"
+                    >
+                      🎁 {t("kids.agePack")}
+                    </Link>
                   </div>
                 )}
 
@@ -225,6 +236,21 @@ export default async function ParentDashboard({
                   </span>
                 </div>
                 <ProgressBar value={q.current_count} max={q.target_count} color="pink" size="sm" className="mt-2" />
+                {(q.coin_reward > 0 || q.star_reward > 0) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {q.coin_reward > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        <CoinIcon /> {q.coin_reward}
+                      </span>
+                    )}
+                    {q.star_reward > 0 && (
+                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                        ⭐ {q.star_reward}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-stone-500">{t("parent.perChild")}</span>
+                  </div>
+                )}
               </Card>
             ))}
           </div>

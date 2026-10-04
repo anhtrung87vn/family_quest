@@ -29,7 +29,7 @@ export function rewardStyle(category: string | null | undefined) {
 }
 
 // Level emoji progression
-const LEVEL_ICONS = ["🌱", "🧭", "🚀", "🌟", "🏆", "👑"];
+const LEVEL_ICONS = ["🌱", "🌿", "🧭", "🗺️", "🥾", "🌟", "🚀", "🏆", "🦉", "🛡️", "🐉", "👑"];
 export function levelIcon(level: number) {
   return LEVEL_ICONS[Math.min(level - 1, LEVEL_ICONS.length - 1)] ?? "🌱";
 }
@@ -91,7 +91,7 @@ export function behaviorStyle(type: string | null | undefined) {
 export type RewardStage = "full_reward" | "reduced_reward" | "stars_only" | "graduated";
 
 const STAGE_STYLES: Record<RewardStage, { icon: string; color: string; bg: string; label_en: string; label_vi: string }> = {
-  full_reward:    { icon: "🪙", color: "text-amber-600",   bg: "bg-amber-50",   label_en: "Full Reward",    label_vi: "Thưởng đầy đủ" },
+  full_reward:    { icon: "💰", color: "text-amber-600",   bg: "bg-amber-50",   label_en: "Full Reward",    label_vi: "Thưởng đầy đủ" },
   reduced_reward: { icon: "📉", color: "text-orange-600",  bg: "bg-orange-50",  label_en: "Reduced",        label_vi: "Giảm thưởng" },
   stars_only:     { icon: "⭐", color: "text-purple-600",  bg: "bg-purple-50",  label_en: "Stars Only",     label_vi: "Chỉ sao" },
   graduated:      { icon: "🎓", color: "text-emerald-600", bg: "bg-emerald-50", label_en: "Graduated!",     label_vi: "Đã tốt nghiệp!" },

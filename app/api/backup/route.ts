@@ -4,6 +4,7 @@ import "@/lib/dev-tls-patch";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveContext } from "@/lib/dev-family";
+import { familyDateISO } from "@/lib/family-time";
 
 async function getFamilyId(): Promise<string> {
   const { familyId } = await resolveContext();
@@ -58,7 +59,7 @@ export async function GET() {
     };
 
     const json = JSON.stringify(backup, null, 2);
-    const filename = `bloomquest-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const filename = `bloomquest-backup-${familyDateISO()}.json`;
 
     return new NextResponse(json, {
       status: 200,

@@ -6,6 +6,8 @@
 //
 // dueOn(rule, date) => boolean
 
+import { familyDateISO, familyWeekday } from "@/lib/family-time";
+
 export type RecurrenceRule =
   | { freq: "daily" }
   | { freq: "weekly"; days: number[] }
@@ -24,8 +26,9 @@ export function parseRule(raw: string | null | undefined): RecurrenceRule | null
   }
 }
 
+/** Whether the rule is due on the family-calendar day of the instant `date`. */
 export function dueOn(rule: RecurrenceRule, date: Date): boolean {
-  const dow = date.getDay(); // 0..6
+  const dow = familyWeekday(date); // 0..6
   if (rule.freq === "daily") return true;
   if (rule.freq === "weekdays") return dow >= 1 && dow <= 5;
   if (rule.freq === "weekly") return rule.days.includes(dow);
@@ -42,10 +45,7 @@ export function ruleLabel(rule: RecurrenceRule): string {
   return "";
 }
 
+/** Today's date (YYYY-MM-DD) on the family calendar — not the server's. */
 export function todayISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return familyDateISO();
 }

@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { sendAgePack } from "../../actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,7 @@ export default async function AgePackPage({
                         <span className="min-w-0 flex-1 truncate text-sm text-stone-800">{label(q)}</span>
                         <span className="text-[11px] text-stone-400">{q.min_age}–{q.max_age}</span>
                         {q.coin_reward > 0 && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">🪙 {q.coin_reward}</span>
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700"><CoinIcon /> {q.coin_reward}</span>
                         )}
                         {q.star_reward > 0 && (
                           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">⭐ {q.star_reward}</span>
@@ -121,7 +122,10 @@ export default async function AgePackPage({
                       {r.reference_price_vnd ? (
                         <span className="text-[11px] text-stone-400">{t("kids.agePackPrice", { price: vnd.format(r.reference_price_vnd) })}</span>
                       ) : null}
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">🪙 {r.coin_cost}</span>
+                      {r.min_level ? (
+                        <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-600">🔒 Lv.{r.min_level}</span>
+                      ) : null}
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700"><CoinIcon /> {r.coin_cost}</span>
                     </label>
                   </li>
                 ))}

@@ -5,54 +5,49 @@ import { resetAndRecloneQuests } from "./actions";
 import { Button } from "@/components/ui/Button";
 
 interface Props {
+  manageLabel: string;
   label: string;
   desc: string;
-  confirmLabel: string;
-  cancelLabel: string;
+  confirmPrompt: string;
 }
 
-export function ResetQuestsButton({ label, desc, confirmLabel, cancelLabel }: Props) {
-  const [confirming, setConfirming] = useState(false);
+/** Collapsed "Manage" section holding the destructive reset & reimport action. */
+export function ResetQuestsButton({ manageLabel, label, desc, confirmPrompt }: Props) {
+  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  function handleConfirm() {
+  function handleReset() {
+    if (!window.confirm(`${label}\n\n${desc}\n\n${confirmPrompt}`)) return;
     startTransition(async () => {
       await resetAndRecloneQuests();
-      setConfirming(false);
+      setOpen(false);
     });
   }
 
   return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
-      <div className="mb-2">
-        <div className="text-xs font-semibold text-orange-700">🔄 {label}</div>
-        <div className="mt-0.5 text-[11px] text-stone-500">{desc}</div>
-      </div>
-      {!confirming ? (
-        <Button
-          size="sm"
-          className="bg-orange-100 text-xs text-orange-600 hover:bg-orange-200"
-          onClick={() => setConfirming(true)}
-        >
-          🔄 {label}
-        </Button>
-      ) : (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="bg-orange-500 text-xs text-white hover:bg-orange-600"
-            onClick={handleConfirm}
-            disabled={isPending}
-          >
-            {isPending ? "..." : confirmLabel}
-          </Button>
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-500 shadow-sm transition-colors hover:border-red-300 hover:text-red-500"
+      >
+        ⚙️ {manageLabel}
+        <span className={`text-[11px] transition-transform duration-150 ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+
+      {open && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50/40 p-4">
+          <div className="text-xs font-semibold text-red-700">🔄 {label}</div>
+          <div className="mt-0.5 text-[11px] text-stone-500">{desc}</div>
           <Button
             size="sm"
             variant="ghost"
-            className="text-xs"
-            onClick={() => setConfirming(false)}
+            className="mt-3 border border-red-300 bg-white text-xs font-semibold text-red-600 hover:bg-red-50"
+            onClick={handleReset}
+            disabled={isPending}
           >
-            {cancelLabel}
+            {isPending ? "⏳" : `🔄 ${label}`}
           </Button>
         </div>
       )}

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { resolveContext } from "@/lib/dev-family";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertChildInFamily } from "@/lib/authz";
+import { familyDateISO } from "@/lib/family-time";
 
 /**
  * Copy a system template into a family's task list.
@@ -73,7 +74,7 @@ export async function copyTemplateToFamily(formData: FormData) {
 
   // If child_id provided, create an assignment
   if (child_id && newTask) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = familyDateISO();
     await supabase.from("task_assignments").insert({
       task_id: newTask.id,
       child_id,

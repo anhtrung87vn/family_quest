@@ -1,19 +1,26 @@
 export default function RewardsLoading() {
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-6 w-32 rounded-full bg-stone-200" />
-      <div className="grid grid-cols-2 gap-3">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="rounded-2xl bg-stone-100 overflow-hidden">
-            <div className="h-1.5 w-full bg-stone-200" />
-            <div className="p-3 space-y-2">
-              <div className="h-4 w-full rounded bg-stone-200" />
-              <div className="h-3 w-1/2 mx-auto rounded bg-stone-200" />
-              <div className="h-8 w-full rounded-xl bg-stone-200 mt-2" />
-            </div>
+    <div className="space-y-5 animate-pulse">
+      <div className="h-7 w-28 rounded-full bg-stone-200" />
+      <div className="h-32 w-full rounded-2xl bg-stone-200" />
+      {[4, 4].map((count, s) => (
+        <div key={s} className="space-y-3">
+          <div className="h-5 w-36 rounded-full bg-stone-200" />
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(count)].map((_, i) => (
+              <div key={i} className="space-y-2 rounded-2xl bg-stone-100 p-3">
+                <div className="flex items-start justify-between">
+                  <div className="h-8 w-8 rounded-lg bg-stone-200" />
+                  <div className="h-5 w-12 rounded-full bg-stone-200" />
+                </div>
+                <div className="h-4 w-3/4 rounded bg-stone-200" />
+                <div className="h-2 w-full rounded-full bg-stone-200" />
+                <div className="h-3 w-1/2 rounded bg-stone-200" />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -2,15 +2,23 @@
  * Age helpers shared by parent and child views.
  * Pure functions — safe to import from client components.
  */
+import { familyDateISO } from "@/lib/family-time";
 
-/** Whole years between a date-of-birth (YYYY-MM-DD) and `today`, or null when unknown. */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/**
+ * Whole years between a date-of-birth (YYYY-MM-DD) and the family-calendar day
+ * of `today`, or null when unknown. Birthdays roll over at local midnight.
+ */
 export function ageFromDob(dob: string | null | undefined, today: Date = new Date()): number | null {
-  if (!dob) return null;
-  const birth = new Date(dob);
-  if (Number.isNaN(birth.getTime())) return null;
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  const b = dob ? ISO_DATE.exec(dob) : null;
+  if (!b) return null;
+  const t = ISO_DATE.exec(familyDateISO(today))!;
+  const [by, bm, bd] = [+b[1], +b[2], +b[3]];
+  const [ty, tm, td] = [+t[1], +t[2], +t[3]];
+  if (bm < 1 || bm > 12 || bd < 1 || bd > 31) return null;
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
   return age;
 }
 

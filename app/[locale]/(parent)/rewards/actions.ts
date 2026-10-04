@@ -19,6 +19,7 @@ const schema = z.object({
   stock: z.coerce.number().int().min(0).optional().nullable(),
   image_url: z.string().url().max(2000).optional().nullable(),
   link_url: z.string().url().max(2000).optional().nullable(),
+  min_level: z.coerce.number().int().min(2).max(12).optional().nullable(),
 });
 
 export async function createReward(formData: FormData) {
@@ -32,6 +33,7 @@ export async function createReward(formData: FormData) {
     stock: formData.get("stock") ? Number(formData.get("stock")) : null,
     image_url: (formData.get("image_url") as string)?.trim() || null,
     link_url: (formData.get("link_url") as string)?.trim() || null,
+    min_level: formData.get("min_level") || null,
   });
   const { supabase, familyId } = await requireFamily();
   const { error } = await supabase.from("rewards").insert({
@@ -45,6 +47,7 @@ export async function createReward(formData: FormData) {
     stock: parsed.stock,
     image_url: parsed.image_url,
     link_url: parsed.link_url,
+    min_level: parsed.min_level ?? null,
   });
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");
@@ -62,6 +65,7 @@ export async function updateReward(formData: FormData) {
     stock: formData.get("stock") ? Number(formData.get("stock")) : null,
     image_url: (formData.get("image_url") as string)?.trim() || null,
     link_url: (formData.get("link_url") as string)?.trim() || null,
+    min_level: formData.get("min_level") || null,
   });
   const { supabase, familyId } = await requireFamily();
   const { error } = await supabase.from("rewards").update({
@@ -74,6 +78,7 @@ export async function updateReward(formData: FormData) {
     stock: parsed.stock,
     image_url: parsed.image_url,
     link_url: parsed.link_url,
+    min_level: parsed.min_level ?? null,
   }).eq("id", id).eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");

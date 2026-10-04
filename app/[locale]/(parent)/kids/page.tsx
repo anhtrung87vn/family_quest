@@ -10,6 +10,11 @@ import { Collapsible } from "@/components/ui/Collapsible";
 import { ageFromDob } from "@/lib/age";
 import { Link } from "@/lib/i18n/routing";
 import { createChild, uploadAvatar, setPin, revokeAssignment, updateChildBirthday } from "./actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
+
+const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors";
+const TOGGLE_PILL = "cursor-pointer select-none bg-stone-100 text-stone-600 ring-amber-400 hover:bg-stone-200";
+const PANEL = "hidden flex-wrap items-center gap-2 rounded-xl bg-stone-50 p-3";
 
 export default async function KidsPage({
   params,
@@ -147,7 +152,7 @@ export default async function KidsPage({
                     )}
                   </div>
                   <div className="text-xs text-stone-500">
-                    {c.grade != null ? `Grade ${c.grade} · ` : ""}
+                    {c.grade != null ? `${t("kids.gradeLabel", { grade: c.grade })} · ` : ""}
                     {c.preferred_language === "vi" ? "Tiếng Việt" : "English"}
                   </div>
                   <div className="mt-0.5 text-xs text-indigo-500">{lvIcon} Lv.{level.level} {levelTitle}</div>
@@ -156,7 +161,7 @@ export default async function KidsPage({
 
               {/* Stat chips */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">🪙 {coin}</span>
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700"><CoinIcon /> {coin}</span>
                 <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-700">⭐ {star}</span>
                 {streak > 0 && (
                   <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700">🔥 {streak}</span>
@@ -172,7 +177,7 @@ export default async function KidsPage({
                     color="indigo"
                     size="sm"
                   />
-                  <div className="mt-0.5 text-[10px] text-stone-400">
+                  <div className="mt-0.5 text-[11px] text-stone-400">
                     {c.lifetime_stars} / {level.nextLevelStars} ⭐ → Lv.{level.level + 1}
                   </div>
                 </div>
@@ -197,7 +202,7 @@ export default async function KidsPage({
                   <Collapsible
                     trigger={
                       <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100">
-                        📋 Nhiệm vụ đang giao ({assignments.length})
+                        📋 {t("kids.assignedTasks", { count: assignments.length })}
                       </span>
                     }
                   >
@@ -209,16 +214,16 @@ export default async function KidsPage({
                           a.status === "rejected"  ? "text-red-500 bg-red-50" :
                           "text-stone-500 bg-stone-100";
                         const statusLabel =
-                          a.status === "submitted" ? "Chờ duyệt" :
-                          a.status === "rejected"  ? "Bị từ chối" : "Đang làm";
+                          a.status === "submitted" ? t("kids.statusSubmitted") :
+                          a.status === "rejected"  ? t("kids.statusRejected") : t("kids.statusTodo");
                         return (
                           <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2">
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-xs font-medium text-stone-800">{task?.name}</div>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusColor}`}>{statusLabel}</span>
-                                {task?.coin_reward ? <span className="text-[10px] text-amber-600">🪙 {task.coin_reward}</span> : null}
-                                {a.due_date && <span className="text-[10px] text-stone-400">{a.due_date}</span>}
+                                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${statusColor}`}>{statusLabel}</span>
+                                {task?.coin_reward ? <span className="text-[11px] text-amber-600"><CoinIcon /> {task.coin_reward}</span> : null}
+                                {a.due_date && <span className="text-[11px] text-stone-400">{a.due_date}</span>}
                               </div>
                             </div>
                             {a.status !== "submitted" && (
@@ -226,7 +231,8 @@ export default async function KidsPage({
                                 <input type="hidden" name="assignment_id" value={a.id} />
                                 <button
                                   type="submit"
-                                  title="Rút lại nhiệm vụ"
+                                  title={t("kids.revokeAssignment")}
+                                  aria-label={t("kids.revokeAssignment")}
                                   className="rounded-full p-1 text-stone-300 hover:bg-red-50 hover:text-red-400 transition-colors"
                                 >
                                   ✕
@@ -241,57 +247,54 @@ export default async function KidsPage({
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-                <Link
-                  href={`/kids/${c.id}/age-pack`}
-                  className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                >
-                  🎁 {t("kids.agePack")}
-                </Link>
-                <Collapsible
-                  trigger={
-                    <span className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200">
-                      📷 {t("kids.changeAvatar")}
-                    </span>
-                  }
-                >
-                  <form action={uploadAvatar} className="flex items-center gap-2">
-                    <input type="hidden" name="child_id" value={c.id} />
-                    <input type="file" name="avatar" accept="image/*" required className="text-xs" />
-                    <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
-                  </form>
-                </Collapsible>
+              {/* Actions — a row of equal pills; each toggle opens its form on its own line below */}
+              <div className="group/actions space-y-3 border-t border-stone-100 pt-3">
+                <div className="flex flex-wrap gap-2">
+                  <Link href={`/kids/${c.id}/age-pack`} className={`${PILL} bg-amber-100 text-amber-700 hover:bg-amber-200`}>
+                    🎁 {t("kids.agePack")}
+                  </Link>
+                  <input id={`avatar-${c.id}`} type="checkbox" className="avatar-toggle sr-only" />
+                  <label
+                    htmlFor={`avatar-${c.id}`}
+                    className={`${PILL} ${TOGGLE_PILL} group-has-[.avatar-toggle:checked]/actions:bg-stone-200 group-has-[.avatar-toggle:checked]/actions:text-stone-800 group-has-[.avatar-toggle:focus-visible]/actions:ring-2`}
+                  >
+                    📷 {t("kids.changeAvatar")}
+                  </label>
+                  <input id={`pin-${c.id}`} type="checkbox" className="pin-toggle sr-only" />
+                  <label
+                    htmlFor={`pin-${c.id}`}
+                    className={`${PILL} ${TOGGLE_PILL} group-has-[.pin-toggle:checked]/actions:bg-stone-200 group-has-[.pin-toggle:checked]/actions:text-stone-800 group-has-[.pin-toggle:focus-visible]/actions:ring-2`}
+                  >
+                    🔐 {t("kids.changePin")}
+                  </label>
+                  <input id={`birthday-${c.id}`} type="checkbox" className="birthday-toggle sr-only" />
+                  <label
+                    htmlFor={`birthday-${c.id}`}
+                    className={`${PILL} ${TOGGLE_PILL} group-has-[.birthday-toggle:checked]/actions:bg-stone-200 group-has-[.birthday-toggle:checked]/actions:text-stone-800 group-has-[.birthday-toggle:focus-visible]/actions:ring-2`}
+                  >
+                    🎂 {t("kids.birthday")}
+                  </label>
+                </div>
 
-                <Collapsible
-                  trigger={
-                    <span className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200">
-                      🔐 {t("kids.changePin")}
-                    </span>
-                  }
-                >
-                  <form action={setPin} className="flex items-center gap-2">
-                    <input type="hidden" name="child_id" value={c.id} />
-                    <input name="pin" inputMode="numeric" pattern="\d{6}" maxLength={6} minLength={6} required
-                      placeholder="••••••" className="h-9 w-28 rounded-xl border border-stone-300 px-3 text-sm" />
-                    <Button type="submit" size="sm" variant="secondary">{t("kids.setPin")}</Button>
-                  </form>
-                </Collapsible>
+                <form action={uploadAvatar} className={`${PANEL} group-has-[.avatar-toggle:checked]/actions:flex`}>
+                  <input type="hidden" name="child_id" value={c.id} />
+                  <input type="file" name="avatar" accept="image/*" required className="min-w-0 flex-1 text-xs" />
+                  <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
+                </form>
 
-                <Collapsible
-                  trigger={
-                    <span className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200">
-                      🎂 {t("kids.birthday")}
-                    </span>
-                  }
-                >
-                  <form action={updateChildBirthday} className="flex items-center gap-2">
-                    <input type="hidden" name="child_id" value={c.id} />
-                    <input name="date_of_birth" type="date" defaultValue={c.date_of_birth ?? ""}
-                      className="h-9 rounded-xl border border-stone-300 px-3 text-sm" />
-                    <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
-                  </form>
-                </Collapsible>
+                <form action={setPin} className={`${PANEL} group-has-[.pin-toggle:checked]/actions:flex`}>
+                  <input type="hidden" name="child_id" value={c.id} />
+                  <input name="pin" inputMode="numeric" pattern="\d{6}" maxLength={6} minLength={6} required
+                    placeholder="••••••" className="h-9 w-28 rounded-xl border border-stone-300 bg-white px-3 text-sm" />
+                  <Button type="submit" size="sm" variant="secondary">{t("kids.setPin")}</Button>
+                </form>
+
+                <form action={updateChildBirthday} className={`${PANEL} group-has-[.birthday-toggle:checked]/actions:flex`}>
+                  <input type="hidden" name="child_id" value={c.id} />
+                  <input name="date_of_birth" type="date" defaultValue={c.date_of_birth ?? ""}
+                    className="h-9 rounded-xl border border-stone-300 bg-white px-3 text-sm" />
+                  <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
+                </form>
               </div>
             </Card>
           );

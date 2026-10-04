@@ -33,7 +33,7 @@ export function ProgressBar({
         style={{ width: `${pct}%` }}
       />
       {showPct && (
-        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-stone-700">
+        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-stone-700">
           {pct}%
         </span>
       )}

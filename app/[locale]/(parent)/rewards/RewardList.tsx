@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { toggleRewardActive, updateReward, deleteReward, uploadRewardImage } from "./actions";
+import { CoinIcon } from "@/components/ui/CoinIcon";
 
 type Reward = {
   id: string;
@@ -15,24 +16,77 @@ type Reward = {
   coin_cost: number;
   stock: number | null;
   active: boolean;
+  requires_approval: boolean;
   dream_eligible: boolean;
   image_url: string | null;
   link_url: string | null;
+  min_level: number | null;
+  min_age: number | null;
+  max_age: number | null;
 };
+
+const CATEGORY_ORDER = ["small", "medium", "large", "experience", "dream"] as const;
+type Category = (typeof CATEGORY_ORDER)[number];
+const UNCATEGORIZED = "other";
 
 interface RewardListProps {
   rewards: Reward[];
-  hideSearch?: boolean;
   labels: {
     search: string;
     noResults: string;
     inactive: string;
     disable: string;
     enable: string;
+    edit: string;
+    delete: string;
+    deleteConfirm: string;
+    minLevel: string;
+    noLevel: string;
+    ages: string;
+    dreamGoal: string;
+    uncategorized: string;
+    name: string;
+    description: string;
+    category: string;
+    costPlaceholder: string;
+    stockPlaceholder: string;
+    imageUrl: string;
+    linkUrl: string;
+    upload: string;
+    requiresApproval: string;
+    dreamEligible: string;
+    save: string;
+    cancel: string;
+    clearSearch: string;
+    cats: Record<Category, string>;
   };
 }
 
-function ImagePicker({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+type Labels = RewardListProps["labels"];
+
+function isCategory(c: string | null): c is Category {
+  return (CATEGORY_ORDER as readonly string[]).includes(c ?? "");
+}
+
+/** "6–10", "6+", "≤10", or null when the reward has no age bounds. */
+function ageRange(min: number | null, max: number | null): string | null {
+  if (min != null && max != null) return `${min}–${max}`;
+  if (min != null) return `${min}+`;
+  if (max != null) return `≤${max}`;
+  return null;
+}
+
+function ImagePicker({
+  value,
+  onChange,
+  placeholder,
+  uploadLabel,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  placeholder: string;
+  uploadLabel: string;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, startUpload] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +109,8 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           type="url"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="🖼 Image URL (https://...)"
-          className="h-9 flex-1 rounded-lg border border-stone-300 px-3 text-sm"
+          placeholder={`🖼 ${placeholder}`}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-stone-300 px-3 text-sm"
         />
         <button
           type="button"
@@ -64,7 +118,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           disabled={uploading}
           className="shrink-0 rounded-lg border border-stone-300 bg-stone-50 px-3 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-50"
         >
-          {uploading ? "⏳" : "📁 Upload"}
+          {uploading ? "⏳" : `📁 ${uploadLabel}`}
         </button>
         <input
           ref={inputRef}
@@ -74,7 +128,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
       </div>
-      {error && <div className="text-[10px] text-red-500">{error}</div>}
+      {error && <div className="text-[11px] text-red-500">{error}</div>}
       {value && (
         <div className="relative inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -82,7 +136,7 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
           <button
             type="button"
             onClick={() => onChange("")}
-            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white hover:bg-red-600"
+            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] text-white hover:bg-red-600"
           >✕</button>
         </div>
       )}
@@ -90,57 +144,68 @@ function ImagePicker({ value, onChange }: { value: string; onChange: (url: strin
   );
 }
 
-function RewardCard({ r, labels }: { r: Reward; labels: RewardListProps["labels"] }) {
+function RewardCard({ r, labels }: { r: Reward; labels: Labels }) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [imageUrl, setImageUrl] = useState(r.image_url ?? "");
   const style = rewardStyle(r.category);
+  const ages = ageRange(r.min_age, r.max_age);
 
   if (editing) {
     return (
-      <Card className="border-amber-200 bg-amber-50/40">
+      <Card className="border-amber-200 bg-amber-50/40 sm:col-span-2">
         <form
           action={async (fd) => { fd.set("image_url", imageUrl); await updateReward(fd); setEditing(false); }}
           className="space-y-2.5"
         >
           <input type="hidden" name="id" value={r.id} />
-          <input name="name" defaultValue={r.name} required placeholder="Name"
+          <input name="name" defaultValue={r.name} required placeholder={labels.name}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
-          <input name="description" defaultValue={r.description ?? ""} placeholder="Description"
+          <input name="description" defaultValue={r.description ?? ""} placeholder={labels.description}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
           <div className="grid grid-cols-2 gap-2">
             <select name="category" defaultValue={r.category ?? ""}
               className="h-9 rounded-lg border border-stone-300 px-2 text-xs">
-              <option value="">Category</option>
-              <option value="small">🍬 Small</option>
-              <option value="medium">🎮 Medium</option>
-              <option value="large">🎁 Large</option>
-              <option value="experience">🎡 Experience</option>
-              <option value="dream">🌈 Dream</option>
+              <option value="">{labels.category}</option>
+              <option value="small">🍬 {labels.cats.small}</option>
+              <option value="medium">🎮 {labels.cats.medium}</option>
+              <option value="large">🎁 {labels.cats.large}</option>
+              <option value="experience">🎡 {labels.cats.experience}</option>
+              <option value="dream">🌈 {labels.cats.dream}</option>
             </select>
-            <input name="coin_cost" type="number" min={1} defaultValue={r.coin_cost} placeholder="🪙 Cost"
-              className="h-9 rounded-lg border border-stone-300 px-3 text-sm" />
+            <input name="coin_cost" type="number" min={1} defaultValue={r.coin_cost} placeholder={labels.costPlaceholder}
+              className="h-9 min-w-0 rounded-lg border border-stone-300 px-3 text-sm" />
           </div>
-          <input name="stock" type="number" min={0} defaultValue={r.stock ?? ""} placeholder="📦 Stock (blank = unlimited)"
+          <input name="stock" type="number" min={0} defaultValue={r.stock ?? ""} placeholder={`📦 ${labels.stockPlaceholder}`}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
-          <ImagePicker value={imageUrl} onChange={setImageUrl} />
-          <input name="link_url" type="url" defaultValue={r.link_url ?? ""} placeholder="🔗 Link URL (https://...)"
+          <label className="flex items-center gap-2 text-xs text-stone-600">
+            🔒 {labels.minLevel}
+            <select name="min_level" defaultValue={r.min_level ?? ""}
+              className="h-9 flex-1 rounded-lg border border-stone-300 px-2 text-xs">
+              <option value="">{labels.noLevel}</option>
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((lv) => (
+                <option key={lv} value={lv}>⭐ Lv.{lv}</option>
+              ))}
+            </select>
+          </label>
+          <ImagePicker value={imageUrl} onChange={setImageUrl} placeholder={labels.imageUrl} uploadLabel={labels.upload} />
+          <input name="link_url" type="url" defaultValue={r.link_url ?? ""} placeholder={`🔗 ${labels.linkUrl}`}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
-          <div className="flex gap-3 text-xs">
+          <div className="flex flex-wrap gap-3 text-xs">
             <label className="flex items-center gap-1.5">
-              <input name="requires_approval" type="checkbox" defaultChecked={r.active} className="h-3.5 w-3.5 rounded" />
-              Needs approval
+              <input name="requires_approval" type="checkbox" defaultChecked={r.requires_approval} className="h-3.5 w-3.5 rounded" />
+              {labels.requiresApproval}
             </label>
             <label className="flex items-center gap-1.5">
               <input name="dream_eligible" type="checkbox" defaultChecked={r.dream_eligible} className="h-3.5 w-3.5 rounded" />
-              🌈 Dream
+              🌈 {labels.dreamEligible}
             </label>
           </div>
           <div className="flex gap-2 pt-1">
-            <Button type="submit" size="sm" className="flex-1 bg-amber-500 text-white hover:bg-amber-600">💾 Save</Button>
+            <Button type="submit" size="sm" className="flex-1 bg-amber-500 text-white hover:bg-amber-600">💾 {labels.save}</Button>
             <button type="button" onClick={() => setEditing(false)}
               className="flex-1 rounded-xl border border-stone-300 px-3 py-1.5 text-xs text-stone-500 hover:bg-stone-50">
-              Cancel
+              {labels.cancel}
             </button>
           </div>
         </form>
@@ -161,27 +226,31 @@ function RewardCard({ r, labels }: { r: Reward; labels: RewardListProps["labels"
         <span className="text-xl">{style.icon}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-1">
-            <div className="text-sm font-semibold text-stone-800 leading-snug">{r.name}</div>
+            <div className="min-w-0 break-words text-sm font-semibold leading-snug text-stone-800">{r.name}</div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <button type="button" onClick={() => setEditing(true)}
+              <button type="button" onClick={() => setEditing(true)} title={labels.edit} aria-label={labels.edit}
                 className="rounded-lg px-1.5 py-1 text-[11px] text-stone-400 hover:bg-stone-100 hover:text-stone-600">
                 ✏️
               </button>
               <form action={toggleRewardActive} className="inline">
                 <input type="hidden" name="id" value={r.id} />
                 <input type="hidden" name="active" value={String(r.active)} />
-                <button type="submit" className="rounded-lg px-1.5 py-1 text-[11px] text-stone-400 hover:bg-stone-100">
+                <button type="submit"
+                  title={r.active ? labels.disable : labels.enable}
+                  aria-label={r.active ? labels.disable : labels.enable}
+                  className="rounded-lg px-1.5 py-1 text-[11px] text-stone-400 hover:bg-stone-100">
                   {r.active ? "⏸" : "▶"}
                 </button>
               </form>
               {confirmDelete ? (
                 <form action={deleteReward} className="inline" onSubmit={() => setConfirmDelete(false)}>
                   <input type="hidden" name="id" value={r.id} />
-                  <button type="submit" className="rounded-lg px-1.5 py-1 text-[11px] text-red-500 hover:bg-red-50">✓ Del</button>
-                  <button type="button" onClick={() => setConfirmDelete(false)} className="rounded-lg px-1 py-1 text-[11px] text-stone-400">✕</button>
+                  <button type="submit" className="rounded-lg px-1.5 py-1 text-[11px] text-red-500 hover:bg-red-50">✓ {labels.deleteConfirm}</button>
+                  <button type="button" onClick={() => setConfirmDelete(false)} aria-label={labels.cancel}
+                    className="rounded-lg px-1 py-1 text-[11px] text-stone-400">✕</button>
                 </form>
               ) : (
-                <button type="button" onClick={() => setConfirmDelete(true)}
+                <button type="button" onClick={() => setConfirmDelete(true)} title={labels.delete} aria-label={labels.delete}
                   className="rounded-lg px-1.5 py-1 text-[11px] text-stone-300 hover:bg-red-50 hover:text-red-400">
                   🗑
                 </button>
@@ -197,18 +266,34 @@ function RewardCard({ r, labels }: { r: Reward; labels: RewardListProps["labels"
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-              🪙 {r.coin_cost.toLocaleString()}
+              <CoinIcon /> {r.coin_cost.toLocaleString()}
             </span>
-            {r.stock != null && (
-              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-600">📦 {r.stock}</span>
-            )}
-            {r.category && (
+            {isCategory(r.category) && (
               <span className={`rounded-full ${style.bg} px-2 py-0.5 text-[11px] font-medium ${style.color}`}>
-                {r.category}
+                {labels.cats[r.category]}
+              </span>
+            )}
+            {ages && (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                🎂 {labels.ages} {ages}
+              </span>
+            )}
+            {r.min_level != null && (
+              <span title={`${labels.minLevel} ${r.min_level}`}
+                className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+                🔒 Lv.{r.min_level}
               </span>
             )}
             {r.dream_eligible && (
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-medium text-purple-600">🌈 Dream</span>
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-medium text-purple-600">
+                🌈 {labels.dreamGoal}
+              </span>
+            )}
+            {r.stock != null && (
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-600">📦 {r.stock}</span>
+            )}
+            {!r.active && (
+              <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[11px] text-stone-600">⏸ {labels.inactive}</span>
             )}
           </div>
         </div>
@@ -217,43 +302,63 @@ function RewardCard({ r, labels }: { r: Reward; labels: RewardListProps["labels"
   );
 }
 
-export function RewardList({ rewards, labels, hideSearch }: RewardListProps) {
+/** One search box over every reward; results are grouped into category sections. */
+export function RewardList({ rewards, labels }: RewardListProps) {
   const [raw, setRaw] = useState("");
   const query = useDeferredValue(raw.trim().toLowerCase());
 
   const filtered = query
-    ? rewards.filter(
-        (r) =>
-          r.name.toLowerCase().includes(query) ||
-          (r.description ?? "").toLowerCase().includes(query) ||
-          (r.category ?? "").toLowerCase().includes(query)
+    ? rewards.filter((r) =>
+        [r.name, r.description ?? "", isCategory(r.category) ? labels.cats[r.category] : r.category ?? ""]
+          .some((field) => field.toLowerCase().includes(query))
       )
     : rewards;
 
-  return (
-    <div>
-      {!hideSearch && (
-        <div className="relative mb-4">
-          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">🔍</span>
-          <input
-            type="search"
-            value={raw}
-            onChange={(e) => setRaw(e.target.value)}
-            placeholder={labels.search}
-            className="h-10 w-full rounded-xl border border-stone-300 bg-white pl-9 pr-4 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-          />
-          {raw && (
-            <button onClick={() => setRaw("")} className="absolute inset-y-0 right-3 flex items-center text-stone-400 hover:text-stone-600">✕</button>
-          )}
-        </div>
-      )}
+  const sections = [...CATEGORY_ORDER, UNCATEGORIZED]
+    .map((key) => ({
+      key,
+      items: filtered.filter((r) => (isCategory(r.category) ? r.category : UNCATEGORIZED) === key),
+    }))
+    .filter((section) => section.items.length > 0);
 
-      {filtered.length === 0 ? (
+  return (
+    <div className="space-y-6">
+      <div className="relative">
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">🔍</span>
+        <input
+          type="search"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          placeholder={labels.search}
+          className="h-10 w-full rounded-xl border border-stone-300 bg-white pl-9 pr-4 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+        />
+        {raw && (
+          <button onClick={() => setRaw("")} aria-label={labels.clearSearch}
+            className="absolute inset-y-0 right-3 flex items-center text-stone-400 hover:text-stone-600">✕</button>
+        )}
+      </div>
+
+      {sections.length === 0 ? (
         <Card><EmptyState icon="🔍" title={labels.noResults} description="" /></Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((r) => <RewardCard key={r.id} r={r} labels={labels} />)}
-        </div>
+        sections.map(({ key, items }) => {
+          const known = isCategory(key);
+          const style = rewardStyle(known ? key : null);
+          return (
+            <section key={key}>
+              <h2 className={`mb-3 flex items-center gap-2 text-base font-bold ${known ? style.color : "text-stone-700"}`}>
+                <span>{known ? style.icon : "🎁"}</span>
+                {known ? labels.cats[key] : labels.uncategorized}
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-500">
+                  {items.length}
+                </span>
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {items.map((r) => <RewardCard key={r.id} r={r} labels={labels} />)}
+              </div>
+            </section>
+          );
+        })
       )}
     </div>
   );

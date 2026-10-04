@@ -21,7 +21,7 @@ export const TASK_TEMPLATE_COLUMNS =
   "id, name, name_vi, description, description_vi, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, responsibility_policy, availability_type, evidence_type, evidence_required, max_audio_seconds, skill_domain, skill_subdomain, min_age, recommended_age, max_age, independence_level, estimated_minutes, recommended_frequency, requires_supervision, development_goal, development_goal_vi, parent_tip, parent_tip_vi, template_key, skill_ladder_key, skill_ladder_level";
 
 export const REWARD_TEMPLATE_COLUMNS =
-  "id, name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock, min_age, recommended_age, max_age, reference_price_vnd, template_key";
+  "id, name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock, min_age, recommended_age, max_age, reference_price_vnd, min_level, template_key";
 
 export interface QuestTemplate extends TemplateRow {
   name_vi?: string | null;
@@ -41,6 +41,7 @@ export interface RewardTemplate {
   recommended_age: number | null;
   max_age: number | null;
   reference_price_vnd?: number | null;
+  min_level?: number | null;
   template_key?: string | null;
   [column: string]: unknown;
 }
