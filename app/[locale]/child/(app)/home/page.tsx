@@ -21,6 +21,7 @@ import { CoinIcon } from "@/components/ui/CoinIcon";
 import { TodayEmptyState } from "@/components/ui/KidEmptyState";
 import { familyDayStart, mondayOfISO } from "@/lib/family-time";
 import { responsibilityWeekProgress, MIN_WEEKLY_RESPONSIBILITIES, WEEK_STARS_HIGH } from "@/lib/responsibility-week";
+import { localName as pickLocalName } from "@/lib/localize";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function ChildHome({
   let weeklyDone = 0;
   let respWeek = responsibilityWeekProgress(0, 0);
   let doneToday = 0;
-  let dreamReward: { name: string; coin_cost: number } | null = null;
+  let dreamReward: { name: string; name_vi?: string | null; coin_cost: number } | null = null;
   let fetchError = false;
   let childRowData: { lifetime_stars?: number; current_dream_reward_id?: string | null; family_id?: string; date_of_birth?: string | null } | null = null;
 
@@ -86,7 +87,7 @@ export default async function ChildHome({
     const familyId = childRowData?.family_id;
 
     if (dreamRewardId) {
-      const { data: dr } = await admin.from("rewards").select("name, coin_cost").eq("id", dreamRewardId).single();
+      const { data: dr } = await admin.from("rewards").select("name, name_vi, coin_cost").eq("id", dreamRewardId).single();
       if (dr) dreamReward = dr;
     }
 
@@ -147,12 +148,12 @@ export default async function ChildHome({
     if (taskCompletionIds.length > 0) {
       const { data: completions } = await admin
         .from("task_completions")
-        .select("id, assignment:task_assignments(task:tasks(name))")
+        .select("id, assignment:task_assignments(task:tasks(name, name_vi))")
         .in("id", taskCompletionIds);
       for (const tc of completions ?? []) {
         const assignment: any = Array.isArray(tc.assignment) ? tc.assignment[0] : tc.assignment;
         const task: any = assignment?.task;
-        const taskName: string | undefined = Array.isArray(task) ? task[0]?.name : task?.name;
+        const taskName = pickLocalName(Array.isArray(task) ? task[0] : task, locale);
         if (taskName) taskNameMap.set(tc.id, taskName);
       }
     }
@@ -404,7 +405,7 @@ export default async function ChildHome({
           <div className="mb-0.5 text-[13px] font-semibold uppercase tracking-wide text-indigo-100">
             🌈 {t("child.myDream")}
           </div>
-          <div className="mb-2 text-base font-bold">{dreamReward.name}</div>
+          <div className="mb-2 text-base font-bold">{pickLocalName(dreamReward, locale)}</div>
           <ProgressBar value={coin} max={dreamReward.coin_cost} color="amber" size="md" showPct />
           <div className="mt-1.5 flex items-center justify-between text-[13px]">
             <span><CoinIcon /> {coin.toLocaleString()}</span>

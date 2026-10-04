@@ -19,7 +19,7 @@ export default async function RewardsPage({
   const t = await getTranslations();
   const { data: rewards } = await supabase
     .from("rewards")
-    .select("id, name, description, category, coin_cost, stock, active, requires_approval, dream_eligible, image_url, link_url, min_level, min_age, max_age")
+    .select("id, name, name_vi, description, description_vi, category, coin_cost, stock, active, requires_approval, dream_eligible, image_url, link_url, min_level, min_age, max_age")
     .eq("is_system_template", false)
     .eq("family_id", familyId)
     .order("coin_cost");
@@ -83,7 +83,9 @@ export default async function RewardsPage({
           rewards={rewards.map((r) => ({
             id: r.id,
             name: r.name,
+            name_vi: r.name_vi ?? null,
             description: r.description ?? null,
+            description_vi: r.description_vi ?? null,
             category: r.category ?? null,
             coin_cost: r.coin_cost,
             stock: r.stock ?? null,

@@ -12,6 +12,7 @@ import { Link } from "@/lib/i18n/routing";
 import { createChild, uploadAvatar, setPin, revokeAssignment, updateChildBirthday } from "./actions";
 import { AvatarUploadForm } from "@/components/ui/AvatarUploadForm";
 import { CoinIcon } from "@/components/ui/CoinIcon";
+import { localName } from "@/lib/localize";
 
 const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors";
 const TOGGLE_PILL = "cursor-pointer select-none bg-stone-100 text-stone-600 ring-amber-400 hover:bg-stone-200";
@@ -41,11 +42,11 @@ export default async function KidsPage({
         supabase.from("child_balances").select("coin_balance, star_balance").eq("child_id", c.id).maybeSingle(),
         supabase.from("child_streaks").select("current_streak, longest_streak").eq("child_id", c.id).maybeSingle(),
         c.current_dream_reward_id
-          ? supabase.from("rewards").select("name, coin_cost").eq("id", c.current_dream_reward_id).single()
+          ? supabase.from("rewards").select("name, name_vi, coin_cost").eq("id", c.current_dream_reward_id).single()
           : Promise.resolve({ data: null }),
         supabase
           .from("task_assignments")
-          .select("id, status, due_date, task:tasks(name, coin_reward, star_reward)")
+          .select("id, status, due_date, task:tasks(name, name_vi, coin_reward, star_reward)")
           .eq("child_id", c.id)
           .in("status", ["todo", "submitted", "rejected"])
           .order("created_at", { ascending: false }),
@@ -188,7 +189,7 @@ export default async function KidsPage({
               {dreamReward && (
                 <div className="rounded-xl bg-purple-50 p-3">
                   <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-medium text-purple-700">🌈 {dreamReward.name}</span>
+                    <span className="font-medium text-purple-700">🌈 {localName(dreamReward, locale)}</span>
                     <span className="font-semibold text-purple-700">
                       {Math.min(100, Math.round((coin / dreamReward.coin_cost) * 100))}%
                     </span>
@@ -220,7 +221,7 @@ export default async function KidsPage({
                         return (
                           <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2">
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-xs font-medium text-stone-800">{task?.name}</div>
+                              <div className="truncate text-xs font-medium text-stone-800">{localName(task, locale)}</div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${statusColor}`}>{statusLabel}</span>
                                 {task?.coin_reward ? <span className="text-[11px] text-amber-600"><CoinIcon /> {task.coin_reward}</span> : null}

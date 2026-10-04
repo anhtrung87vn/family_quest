@@ -9,6 +9,7 @@ import { createFamilyQuest, contributeToQuest, cancelQuest } from "./actions";
 import { CloneQuestsButton } from "./CloneQuestsButton";
 import { ResetQuestsButton } from "./ResetQuestsButton";
 import { CoinIcon } from "@/components/ui/CoinIcon";
+import { localTitle, localDesc } from "@/lib/localize";
 
 export const dynamic = "force-dynamic";
 
@@ -107,8 +108,8 @@ export default async function FamilyQuestsPage({
                 <Card key={q.id} className="border-pink-200 bg-pink-50 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-stone-800">{q.title}</h3>
-                      {q.description && <p className="mt-0.5 text-xs text-stone-500">{q.description}</p>}
+                      <h3 className="font-semibold text-stone-800">{localTitle(q, locale)}</h3>
+                      {localDesc(q, locale) && <p className="mt-0.5 text-xs text-stone-500">{localDesc(q, locale)}</p>}
                     </div>
                     <form action={cancelQuest}>
                       <input type="hidden" name="quest_id" value={q.id} />
@@ -183,7 +184,7 @@ export default async function FamilyQuestsPage({
               <Card key={q.id} className="border-emerald-100 bg-emerald-50 opacity-80">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium text-stone-800">{q.title}</h3>
+                    <h3 className="font-medium text-stone-800">{localTitle(q, locale)}</h3>
                     <div className="mt-0.5 text-xs text-stone-400">
                       {q.target_count} / {q.target_count}
                       {q.coin_reward > 0 && <> · <CoinIcon /> {q.coin_reward}</>}

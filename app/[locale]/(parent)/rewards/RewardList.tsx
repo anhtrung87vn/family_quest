@@ -8,11 +8,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { toggleRewardActive, updateReward, deleteReward, uploadRewardImage } from "./actions";
 import { CoinIcon } from "@/components/ui/CoinIcon";
 import { compressImage } from "@/lib/compress-image";
+import { useLocale } from "next-intl";
+import { localName, localDesc } from "@/lib/localize";
 
 type Reward = {
   id: string;
   name: string;
+  name_vi: string | null;
   description: string | null;
+  description_vi: string | null;
   category: string | null;
   coin_cost: number;
   stock: number | null;
@@ -148,6 +152,9 @@ function ImagePicker({
 
 function RewardCard({ r, labels }: { r: Reward; labels: Labels }) {
   const [editing, setEditing] = useState(false);
+  const locale = useLocale();
+  // In Vietnamese, edit the Vietnamese text the parent actually sees.
+  const editVi = locale === "vi" && !!r.name_vi;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [imageUrl, setImageUrl] = useState(r.image_url ?? "");
   const style = rewardStyle(r.category);
@@ -161,9 +168,9 @@ function RewardCard({ r, labels }: { r: Reward; labels: Labels }) {
           className="space-y-2.5"
         >
           <input type="hidden" name="id" value={r.id} />
-          <input name="name" defaultValue={r.name} required placeholder={labels.name}
+          <input name={editVi ? "name_vi" : "name"} defaultValue={editVi ? r.name_vi ?? "" : r.name} required placeholder={labels.name}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
-          <input name="description" defaultValue={r.description ?? ""} placeholder={labels.description}
+          <input name={editVi ? "description_vi" : "description"} defaultValue={(editVi ? r.description_vi : r.description) ?? ""} placeholder={labels.description}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
           <div className="grid grid-cols-2 gap-2">
             <select name="category" defaultValue={r.category ?? ""}
@@ -221,14 +228,14 @@ function RewardCard({ r, labels }: { r: Reward; labels: Labels }) {
       {r.image_url && (
         <div className="mb-2 -mx-4 -mt-4 overflow-hidden rounded-t-2xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={r.image_url} alt={r.name} className="h-32 w-full object-cover" />
+          <img src={r.image_url} alt={localName(r, locale)} className="h-32 w-full object-cover" />
         </div>
       )}
       <div className="flex items-start gap-2">
         <span className="text-xl">{style.icon}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-1">
-            <div className="min-w-0 break-words text-sm font-semibold leading-snug text-stone-800">{r.name}</div>
+            <div className="min-w-0 break-words text-sm font-semibold leading-snug text-stone-800">{localName(r, locale)}</div>
             <div className="flex shrink-0 items-center gap-0.5">
               <button type="button" onClick={() => setEditing(true)} title={labels.edit} aria-label={labels.edit}
                 className="rounded-lg px-1.5 py-1 text-[11px] text-stone-400 hover:bg-stone-100 hover:text-stone-600">
@@ -259,7 +266,7 @@ function RewardCard({ r, labels }: { r: Reward; labels: Labels }) {
               )}
             </div>
           </div>
-          {r.description && <div className="mt-0.5 text-xs text-stone-500">{r.description}</div>}
+          {localDesc(r, locale) && <div className="mt-0.5 text-xs text-stone-500">{localDesc(r, locale)}</div>}
           {r.link_url && (
             <a href={r.link_url} target="_blank" rel="noopener noreferrer"
               className="mt-0.5 block truncate text-xs text-blue-500 hover:underline">
@@ -311,7 +318,7 @@ export function RewardList({ rewards, labels }: RewardListProps) {
 
   const filtered = query
     ? rewards.filter((r) =>
-        [r.name, r.description ?? "", isCategory(r.category) ? labels.cats[r.category] : r.category ?? ""]
+        [r.name, r.name_vi ?? "", r.description ?? "", isCategory(r.category) ? labels.cats[r.category] : r.category ?? ""]
           .some((field) => field.toLowerCase().includes(query))
       )
     : rewards;

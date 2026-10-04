@@ -145,10 +145,13 @@ const updateTaskSchema = z.object({
 });
 
 export async function updateTask(formData: FormData) {
+  // The form edits the Vietnamese text (name_vi/description_vi) when the parent
+  // works in Vietnamese on a bilingual task; otherwise the base columns.
+  const editVi = formData.has("name_vi");
   const parsed = updateTaskSchema.parse({
     id: formData.get("id"),
-    name: formData.get("name"),
-    description: formData.get("description") || null,
+    name: formData.get(editVi ? "name_vi" : "name"),
+    description: formData.get(editVi ? "description_vi" : "description") || null,
     coin_reward: formData.get("coin_reward") || 0,
     star_reward: formData.get("star_reward") || 0,
     evidence_type: formData.get("evidence_type") || "none",
@@ -161,8 +164,9 @@ export async function updateTask(formData: FormData) {
   const { error } = await supabase
     .from("tasks")
     .update({
-      name: parsed.name,
-      description: parsed.description,
+      ...(editVi
+        ? { name_vi: parsed.name, description_vi: parsed.description }
+        : { name: parsed.name, description: parsed.description }),
       coin_reward: parsed.coin_reward,
       star_reward: parsed.star_reward,
       evidence_type: parsed.evidence_type,

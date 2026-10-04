@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Link } from "@/lib/i18n/routing";
 import { CoinIcon } from "@/components/ui/CoinIcon";
+import { localName, localTitle } from "@/lib/localize";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export default async function ParentDashboard({
             .map((c) => c.current_dream_reward_id)
             .filter((id): id is string => !!id);
           return dreamIds.length
-            ? supabase.from("rewards").select("id, name, coin_cost").in("id", dreamIds)
+            ? supabase.from("rewards").select("id, name, name_vi, coin_cost").in("id", dreamIds)
             : Promise.resolve({ data: [] as { id: string; name: string; coin_cost: number }[] });
         })(),
       ])
@@ -84,7 +85,7 @@ export default async function ParentDashboard({
   // Active family quests
   const questsQ = supabase
     .from("family_quests")
-    .select("id, title, current_count, target_count, coin_reward, star_reward")
+    .select("id, title, title_vi, current_count, target_count, coin_reward, star_reward")
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(3);
@@ -206,7 +207,7 @@ export default async function ParentDashboard({
                 {dreamReward && (
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs text-stone-500">
-                      <span>🌈 {dreamReward.name}</span>
+                      <span>🌈 {localName(dreamReward, locale)}</span>
                       <span className="font-semibold text-stone-700">
                         {Math.min(100, Math.round((coinBalance / dreamReward.coin_cost) * 100))}%
                       </span>
@@ -230,7 +231,7 @@ export default async function ParentDashboard({
             {activeQuests.map((q) => (
               <Card key={q.id} className="border-pink-200 bg-pink-50">
                 <div className="flex items-center justify-between">
-                  <div className="font-medium text-stone-800">{q.title}</div>
+                  <div className="font-medium text-stone-800">{localTitle(q, locale)}</div>
                   <span className="text-xs font-semibold text-pink-600">
                     {q.current_count} / {q.target_count}
                   </span>

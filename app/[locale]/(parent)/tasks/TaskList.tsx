@@ -10,11 +10,14 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { toggleTaskActive, toggleTaskPool, assignTask, deleteTask, updateTask, disableOutOfAgeTasks, convertResponsibilityToHabit } from "./actions";
 import { CoinIcon } from "@/components/ui/CoinIcon";
+import { localName, localDesc } from "@/lib/localize";
 
 type Task = {
   id: string;
   name: string;
+  name_vi?: string | null;
   description: string | null;
+  description_vi?: string | null;
   category: string | null;
   coin_reward: number;
   star_reward: number;
@@ -84,6 +87,7 @@ function ageRangeLabel(task: Task): string {
 function TaskCard({ task, childList, labels }: { task: Task; childList: Child[]; labels: TaskListProps["labels"] }) {
   const t = useTranslations();
   const locale = useLocale();
+  const editVi = locale === "vi" && !!task.name_vi;
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -109,12 +113,12 @@ function TaskCard({ task, childList, labels }: { task: Task; childList: Child[];
         <span className="mt-0.5 text-xl" aria-hidden>{style.icon}</span>
 
         <div className="min-w-0 flex-1 basis-48">
-          <div className="truncate font-semibold text-stone-800" title={task.name}>
-            {task.name}
+          <div className="truncate font-semibold text-stone-800" title={localName(task, locale)}>
+            {localName(task, locale)}
             {!task.active && <span className="ml-2 text-xs text-stone-400">({labels.inactive})</span>}
           </div>
-          {task.description && (
-            <div className="line-clamp-1 text-xs text-stone-500" title={task.description}>{task.description}</div>
+          {localDesc(task, locale) && (
+            <div className="line-clamp-1 text-xs text-stone-500" title={localDesc(task, locale)}>{localDesc(task, locale)}</div>
           )}
 
           {/* Chips */}
@@ -253,9 +257,10 @@ function TaskCard({ task, childList, labels }: { task: Task; childList: Child[];
           className="mt-3 space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3"
         >
           <input type="hidden" name="id" value={task.id} />
-          <input name="name" defaultValue={task.name} required aria-label={t("tasks.name")}
+          {/* In Vietnamese, edit the Vietnamese text the parent actually sees. */}
+          <input name={editVi ? "name_vi" : "name"} defaultValue={editVi ? task.name_vi ?? "" : task.name} required aria-label={t("tasks.name")}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
-          <input name="description" defaultValue={task.description ?? ""} placeholder={t("tasks.description")} aria-label={t("tasks.description")}
+          <input name={editVi ? "description_vi" : "description"} defaultValue={(editVi ? task.description_vi : task.description) ?? ""} placeholder={t("tasks.description")} aria-label={t("tasks.description")}
             className="h-9 w-full rounded-lg border border-stone-300 px-3 text-sm" />
           <div className="grid grid-cols-2 gap-2">
             <label className="flex items-center gap-1 text-xs text-stone-600">
@@ -362,6 +367,7 @@ export function TaskList({ tasks, children: childList, labels }: TaskListProps) 
     return (
       task.name.toLowerCase().includes(query) ||
       (task.description ?? "").toLowerCase().includes(query) ||
+      (task.name_vi ?? "").toLowerCase().includes(query) ||
       (task.category ?? "").toLowerCase().includes(query)
     );
   });

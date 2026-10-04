@@ -22,7 +22,7 @@ export default async function TasksPage({
   const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
 
-  const tasksQ = supabase.from("tasks").select("id, name, description, category, coin_reward, star_reward, active, recurrence_rule, in_pool, behavior_type, availability_type, min_age, recommended_age, max_age, evidence_type, evidence_required, requires_approval").eq("is_system_template", false).eq("active", true).eq("family_id", familyId);
+  const tasksQ = supabase.from("tasks").select("id, name, name_vi, description, description_vi, category, coin_reward, star_reward, active, recurrence_rule, in_pool, behavior_type, availability_type, min_age, recommended_age, max_age, evidence_type, evidence_required, requires_approval").eq("is_system_template", false).eq("active", true).eq("family_id", familyId);
   const childrenQ = supabase.from("children").select("id, name, date_of_birth").eq("family_id", familyId);
   const [{ data: tasks }, { data: children }] = await Promise.all([
     tasksQ.order("created_at", { ascending: false }),

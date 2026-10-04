@@ -55,9 +55,11 @@ export async function createReward(formData: FormData) {
 
 export async function updateReward(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
+  // Vietnamese UI edits name_vi/description_vi of bilingual rewards.
+  const editVi = formData.has("name_vi");
   const parsed = schema.parse({
-    name: formData.get("name"),
-    description: formData.get("description") || null,
+    name: formData.get(editVi ? "name_vi" : "name"),
+    description: formData.get(editVi ? "description_vi" : "description") || null,
     category: formData.get("category") || null,
     coin_cost: formData.get("coin_cost"),
     requires_approval: formData.get("requires_approval") === "on",
@@ -69,8 +71,9 @@ export async function updateReward(formData: FormData) {
   });
   const { supabase, familyId } = await requireFamily();
   const { error } = await supabase.from("rewards").update({
-    name: parsed.name,
-    description: parsed.description,
+    ...(editVi
+      ? { name_vi: parsed.name, description_vi: parsed.description }
+      : { name: parsed.name, description: parsed.description }),
     category: parsed.category,
     coin_cost: parsed.coin_cost,
     requires_approval: parsed.requires_approval,

@@ -28,6 +28,7 @@ import { getResponsibilitySummary } from "@/lib/responsibility";
 import { HabitSuggestionCard } from "@/components/ui/HabitSuggestionCard";
 import { CoinIcon } from "@/components/ui/CoinIcon";
 import { timeAgo } from "@/lib/time-ago";
+import { localName } from "@/lib/localize";
 
 /** Localized "5 minutes ago" / "5 phút trước" for a past timestamp. */
 
@@ -51,13 +52,13 @@ export default async function ApprovalsPage({
   const [pendingTasksResult, pendingRedemptionsResult, childrenResult, missedResult] = await Promise.all([
     supabase
       .from("task_completions")
-      .select("id, submitted_at, assignment:task_assignments!inner(id, child:children!inner(id,name,avatar_url), task:tasks(id,name,coin_reward,star_reward,category))")
+      .select("id, submitted_at, assignment:task_assignments!inner(id, child:children!inner(id,name,avatar_url), task:tasks(id,name,name_vi,coin_reward,star_reward,category))")
       .eq("status", "submitted")
       .eq("assignment.child.family_id", familyId)
       .order("submitted_at", { ascending: true }),
     supabase
       .from("reward_redemptions")
-      .select("id, coin_cost, requested_at, child:children!inner(id,name,avatar_url), reward:rewards(id,name)")
+      .select("id, coin_cost, requested_at, child:children!inner(id,name,avatar_url), reward:rewards(id,name,name_vi)")
       .eq("status", "requested")
       .eq("child.family_id", familyId)
       .order("requested_at", { ascending: true }),
@@ -137,12 +138,12 @@ export default async function ApprovalsPage({
   if (taskCompletionIds.length > 0) {
     const { data: completions } = await supabase
       .from("task_completions")
-      .select("id, assignment:task_assignments(task:tasks(name))")
+      .select("id, assignment:task_assignments(task:tasks(name, name_vi))")
       .in("id", taskCompletionIds);
     for (const tc of completions ?? []) {
       const assignment: any = Array.isArray(tc.assignment) ? tc.assignment[0] : tc.assignment;
       const task: any = assignment?.task;
-      const taskName: string | undefined = Array.isArray(task) ? task[0]?.name : task?.name;
+      const taskName = localName(Array.isArray(task) ? task[0] : task, locale);
       if (taskName) taskNameMap.set(tc.id, taskName);
     }
   }
@@ -442,7 +443,7 @@ export default async function ApprovalsPage({
                             <span className="text-xs text-stone-400">{timeAgo(c.submitted_at, locale)}</span>
                           )}
                         </div>
-                        <p className="mt-0.5 break-words text-sm leading-snug text-stone-700">{task?.name}</p>
+                        <p className="mt-0.5 break-words text-sm leading-snug text-stone-700">{localName(task, locale)}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700"><CoinIcon />+{task?.coin_reward}</span>
                           {task?.star_reward > 0 && (
@@ -490,7 +491,7 @@ export default async function ApprovalsPage({
                       <div>
                         <span className="font-semibold text-stone-800">{child?.name}</span>
                         <span className="mx-1.5 text-stone-300">·</span>
-                        <span className="text-sm text-stone-600">{reward?.name}</span>
+                        <span className="text-sm text-stone-600">{localName(reward, locale)}</span>
                       </div>
                       <div className="mt-1">
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
