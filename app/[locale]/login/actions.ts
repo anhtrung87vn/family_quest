@@ -24,7 +24,6 @@ export async function signInWithPassword(formData: FormData) {
     redirect({ href: "/login?error=invalid", locale: "en" });
   }
 
-  console.log("[signIn] NODE_TLS_REJECT_UNAUTHORIZED:", process.env.NODE_TLS_REJECT_UNAUTHORIZED);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data!);
 
@@ -47,18 +46,6 @@ export async function signUpParent(formData: FormData) {
     redirect({ href: "/login?tab=signup&error=invalid", locale: "en" });
   }
 
-  console.log("[signUp] attempting signup for:", parsed.data!.email);
-  console.log("[signUp] SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-  console.log("[signUp] NODE_TLS_REJECT_UNAUTHORIZED:", process.env.NODE_TLS_REJECT_UNAUTHORIZED);
-
-  // Test raw connectivity before Supabase client
-  try {
-    const probe = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`);
-    console.log("[signUp] connectivity probe status:", probe.status);
-  } catch (e) {
-    console.error("[signUp] connectivity probe FAILED:", (e as Error).message, (e as NodeJS.ErrnoException).cause);
-  }
-
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp(parsed.data!);
 
@@ -71,7 +58,6 @@ export async function signUpParent(formData: FormData) {
 
   // Auto-confirm email so user can sign in immediately without waiting for confirmation email
   if (data.user!.email_confirmed_at === null || data.user!.email_confirmed_at === undefined) {
-    console.log("[signUp] auto-confirming email for:", data.user!.id);
     await admin.auth.admin.updateUserById(data.user!.id, { email_confirm: true });
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 
@@ -19,9 +20,10 @@ export function BottomNav({ labels, locale }: { labels: Record<string, string>; 
         const fullHref = `/${locale}${tab.href}`;
         const isActive = pathname.startsWith(fullHref);
         return (
-          <a
+          <Link
             key={tab.key}
-            href={fullHref}
+            href={fullHref as any}
+            prefetch
             className={clsx(
               "flex flex-col items-center gap-0.5 rounded-2xl px-4 py-1.5 text-xs transition-all",
               isActive
@@ -31,7 +33,7 @@ export function BottomNav({ labels, locale }: { labels: Record<string, string>; 
           >
             <span className="text-[22px] leading-none">{tab.icon}</span>
             <span>{labels[tab.key]}</span>
-          </a>
+          </Link>
         );
       })}
     </nav>

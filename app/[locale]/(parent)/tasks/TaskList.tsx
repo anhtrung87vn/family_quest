@@ -20,6 +20,9 @@ type Task = {
   in_pool?: boolean;
   behavior_type?: string;
   availability_type?: string;
+  min_age?: number | null;
+  recommended_age?: number | null;
+  max_age?: number | null;
 };
 
 const BEHAVIOR_LABELS: Record<string, { icon: string; label: string; color: string }> = {
@@ -109,6 +112,13 @@ function TaskCard({ task, childList, labels }: { task: Task; childList: Child[];
             {task.behavior_type && BEHAVIOR_LABELS[task.behavior_type] && (
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BEHAVIOR_LABELS[task.behavior_type].color}`}>
                 {BEHAVIOR_LABELS[task.behavior_type].icon} {BEHAVIOR_LABELS[task.behavior_type].label}
+              </span>
+            )}
+            {(task.min_age != null || task.recommended_age != null) && (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                👦 {task.min_age != null ? `${task.min_age}` : ""}
+                {task.min_age != null && task.max_age != null ? `–${task.max_age}` : ""}
+                {task.recommended_age != null ? ` (đề xuất ${task.recommended_age})` : ""}
               </span>
             )}
           </div>

@@ -1,0 +1,46 @@
+@startuml Habit_Fading_Flow
+!theme plain
+title Use Case Flow: Habit Building & Fading
+
+|Parent|
+start
+:Create task with\nbehavior_type = habit_building;
+:Assign to child;
+
+|System|
+:Initialize child_task_reward_progress\n(stage = full_reward,\ncompletions = 0);
+
+|Child|
+repeat :Complete task repeatedly;
+  :Submit task;
+
+  |Parent|
+  :Approve task;
+
+  |System|
+  :Increment completions counter;
+  :Calculate effective rewards\nvia effective_rewards();
+
+  :Award coins based on stage:\nfull_reward = 100% coins\nreduced_reward = 50% coins\nstars_only = 0% coins\ngraduated = 0% coins/stars;
+
+  |Parent|
+  if (Ready to advance stage?) then (yes)
+    :Update reward stage\n(via updateRewardStage action);
+
+    |System|
+    :child_task_reward_progress\nstage = next stage;
+  else (no)
+  endif
+
+  |Child|
+  :See stage indicator\non task card;
+
+repeat while (not graduated?)
+
+|System|
+:Stage = graduated;
+:Task still visible but\nno rewards;
+:Child has internalized\nthe habit;
+
+stop
+@enduml

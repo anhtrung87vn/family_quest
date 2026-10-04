@@ -27,10 +27,15 @@ export default async function ChildQuests({
 
   const { data: rows } = await admin
     .from("task_assignments")
-    .select("id, status, due_date, created_at, task:tasks(id, name, category, coin_reward, star_reward)")
+    .select("id, status, due_date, created_at, task:tasks(id, name, name_vi, description, description_vi, category, coin_reward, star_reward)")
     .eq("child_id", session.childId)
     .order("created_at", { ascending: false })
     .limit(100);
+
+  const localName = (task: any) =>
+    (locale === "vi" && task?.name_vi) ? task.name_vi : (task?.name ?? "");
+  const localDesc = (task: any): string | null =>
+    (locale === "vi" && task?.description_vi) ? task.description_vi : (task?.description ?? null);
 
   const today = rows?.filter((r) => (r.status === "todo" || r.status === "rejected") && (!r.due_date || r.due_date <= todayStr)) ?? [];
   const upcoming = rows?.filter((r) => r.status === "todo" && r.due_date && r.due_date > todayStr) ?? [];
@@ -93,7 +98,10 @@ export default async function ChildQuests({
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{cat.icon}</span>
                         <div>
-                          <div className="font-semibold text-stone-800">{task?.name}</div>
+                          <div className="font-semibold text-stone-800">{localName(task)}</div>
+                          {localDesc(task) && (
+                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                          )}
                           <div className={`text-[10px] font-medium ${cat.color}`}>
                             {t(`tasks.cat.${task?.category ?? "learning"}`)}
                           </div>
@@ -134,7 +142,7 @@ export default async function ChildQuests({
                 <li key={a.id} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 opacity-75">
                   <span className="text-lg">{cat.icon}</span>
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-stone-600">{task?.name}</div>
+                    <div className="text-sm font-medium text-stone-600">{localName(task)}</div>
                     <div className="text-xs text-stone-400">📅 {a.due_date}</div>
                   </div>
                   <div className="text-right text-xs">
@@ -170,7 +178,7 @@ export default async function ChildQuests({
                 <li key={a.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <span className="text-lg">{cat.icon}</span>
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{task?.name}</div>
+                    <div className="text-sm font-medium">{localName(task)}</div>
                     <div className="text-xs text-amber-600">⏳ {t("child.waiting")}</div>
                   </div>
                   <span className="text-xs text-stone-400">
@@ -207,7 +215,7 @@ export default async function ChildQuests({
                   <div className="flex items-center gap-3">
                     <span className="text-lg">{cat.icon}</span>
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-stone-600">{task?.name}</div>
+                      <div className="text-sm font-medium text-stone-600">{localName(task)}</div>
                     </div>
                     <span className="text-xs font-medium text-emerald-600">✓ {t("child.approved")}</span>
                   </div>

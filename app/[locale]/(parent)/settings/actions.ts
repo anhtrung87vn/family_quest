@@ -4,9 +4,7 @@ import "@/lib/dev-tls-patch";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { redirect } from "@/lib/i18n/routing";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_USER_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 
 const schema = z.object({ language: z.enum(["en", "vi"]) });
 
@@ -21,42 +19,22 @@ export async function setLanguage(formData: FormData) {
     maxAge: 60 * 60 * 24 * 365,
   });
 
-  // Persist to user_preferences
-  if (DEV_BYPASS) {
-    const admin = createAdminClient();
-    await admin.from("user_preferences").upsert({ user_id: DEV_USER_ID, language }, { onConflict: "user_id" });
-  } else {
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (auth.user) {
-      await supabase
-        .from("user_preferences")
-        .upsert({ user_id: auth.user.id, language }, { onConflict: "user_id" });
-    }
-  }
+  // Persist to user_preferences — always resolve via real session first
+  const { userId, supabase } = await resolveContext();
+  await supabase
+    .from("user_preferences")
+    .upsert({ user_id: userId, language }, { onConflict: "user_id" });
 
   redirect({ href: "/settings", locale: language });
 }
 
 export async function deleteAllTempEvidence(_formData: FormData) {
+  const { familyId, supabase } = await resolveContext();
+  const { createAdminClient } = await import("@/lib/supabase/admin");
   const admin = createAdminClient();
 
-  // Resolve family
-  let familyId: string | null = null;
-  if (DEV_BYPASS) {
-    const { DEV_FAMILY_ID } = await import("@/lib/dev-family");
-    familyId = DEV_FAMILY_ID;
-  } else {
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) throw new Error("Unauthorized");
-    const { data: u } = await admin.from("users").select("family_id").eq("id", auth.user.id).single();
-    familyId = u?.family_id ?? null;
-  }
-  if (!familyId) throw new Error("No family");
-
-  // Fetch all active media evidence for this family
-  const { data: rows } = await admin
+  // Fetch all active media evidence for this family (user-scoped, RLS applies)
+  const { data: rows } = await supabase
     .from("task_evidence")
     .select("id, storage_path")
     .eq("family_id", familyId)
@@ -66,9 +44,10 @@ export async function deleteAllTempEvidence(_formData: FormData) {
   let deleted = 0;
   for (const row of rows ?? []) {
     if (row.storage_path) {
+      // Storage remove uses admin — Supabase storage through SSR cookies is unreliable
       await admin.storage.from("family-evidence").remove([row.storage_path]);
     }
-    await admin
+    await supabase
       .from("task_evidence")
       .update({
         status: "deleted",

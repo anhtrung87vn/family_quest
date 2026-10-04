@@ -2,8 +2,7 @@ import { getTranslations, getLocale } from "next-intl/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Collapsible } from "@/components/ui/Collapsible";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { setLanguage, deleteAllTempEvidence } from "./actions";
 
 export default async function SettingsPage() {
@@ -11,16 +10,14 @@ export default async function SettingsPage() {
   const current = await getLocale();
 
   // Fetch evidence storage stats
-  const admin = createAdminClient();
-  let familyId: string | null = DEV_BYPASS ? DEV_FAMILY_ID : null;
-  if (!DEV_BYPASS) {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (auth?.user) {
-      const { data: u } = await admin.from("users").select("family_id").eq("id", auth.user.id).single();
-      familyId = u?.family_id ?? null;
-    }
+  let familyId: string | null = null;
+  let supabase: import("@supabase/supabase-js").SupabaseClient | null = null;
+  try {
+    const ctx = await resolveContext();
+    familyId = ctx.familyId;
+    supabase = ctx.supabase;
+  } catch {
+    // Not authenticated — skip storage stats
   }
 
   let tempCount = 0;
@@ -28,8 +25,8 @@ export default async function SettingsPage() {
   let memoryCount = 0;
   let memorySizeBytes = 0;
 
-  if (familyId) {
-    const { data: tempRows } = await admin
+  if (familyId && supabase) {
+    const { data: tempRows } = await supabase
       .from("task_evidence")
       .select("file_size")
       .eq("family_id", familyId)
@@ -40,7 +37,7 @@ export default async function SettingsPage() {
       tempSizeBytes += r.file_size ?? 0;
     }
 
-    const { data: memRows } = await admin
+    const { data: memRows } = await supabase
       .from("family_memories")
       .select("file_size_bytes")
       .eq("family_id", familyId)

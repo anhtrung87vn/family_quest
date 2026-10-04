@@ -6,7 +6,7 @@ import { todayISO } from "@/lib/recurrence";
 import { getLevelInfo, LEVELS } from "@/lib/levels";
 import { getStreak } from "@/lib/streaks";
 import { taskStyle, levelIcon, behaviorStyle, stageStyle } from "@/lib/category-style";
-import { submitTaskAction, claimChoiceQuestAction, refreshPoolAction, markMessagesReadAction, reactToMessageAction, revokeAssignmentAction, clearAllMessagesAction } from "../actions";
+import { submitTaskAction, claimChoiceQuestAction, refreshPoolAction, markMessagesReadAction, reactToMessageAction, revokeAssignmentAction, clearAllMessagesAction, resolveRepairAction } from "../actions";
 import { redirect } from "@/lib/i18n/routing";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { MessagesSection } from "@/components/ui/MessagesSection";
 import { ChildGuide } from "@/components/ui/ChildGuide";
 import { SwipeToRevoke } from "@/components/ui/SwipeToRevoke";
+import { Collapsible } from "@/components/ui/Collapsible";
+import { rankTemplates, poolSizeForAge } from "@/lib/recommendations";
+import { RepairSection } from "@/components/ui/RepairSection";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +36,7 @@ export default async function ChildHome({
   const admin = createAdminClient();
   const today = todayISO();
 
-  type PoolTask = { id: string; name: string; category: string | null; coin_reward: number; star_reward: number; requires_approval: boolean; behavior_type?: string };
+  type PoolTask = { id: string; name: string; name_vi?: string | null; description?: string | null; description_vi?: string | null; category: string | null; coin_reward: number; star_reward: number; requires_approval: boolean; behavior_type?: string };
   type ClaimedPoolQuest = { id: string; status: string; task: PoolTask | null };
   type TaskWithBehavior = { id: string; name: string; category: string | null; coin_reward: number; star_reward: number; behavior_type?: string };
 
@@ -45,12 +48,13 @@ export default async function ChildHome({
   let weeklyDone: number | null = 0;
   let dreamReward: { name: string; coin_cost: number } | null = null;
   let fetchError = false;
+  let childRowData: { lifetime_stars?: number; current_dream_reward_id?: string | null; family_id?: string; date_of_birth?: string | null } | null = null;
 
   // Parent messages
   type ParentMessage = { id: string; message: string; message_type: string; created_at: string; reaction: string | null; read_at: string | null; reference_id: string | null; media_type?: string | null; media_path?: string | null; media_mime?: string | null; media_signed_url?: string | null; audio_path?: string | null; audio_signed_url?: string | null };
   let recentMessages: ParentMessage[] = [];
   let unreadCount = 0;
-  let taskNameMap = new Map<string, string>();
+  const taskNameMap = new Map<string, string>();
 
   // Quest Pool state
   let poolTasks: PoolTask[] = [];
@@ -63,7 +67,7 @@ export default async function ChildHome({
   try {
     // Fetch tasks independently so ECONNRESET on other queries doesn't blank the task list
     const todosRes = await admin.from("task_assignments")
-      .select("id, status, task:tasks(id, name, category, coin_reward, star_reward, behavior_type, evidence_type, evidence_required, max_audio_seconds)")
+      .select("id, status, task:tasks(id, name, name_vi, description, description_vi, category, coin_reward, star_reward, behavior_type, evidence_type, evidence_required, max_audio_seconds)")
       .eq("child_id", session.childId)
       .in("status", ["todo", "rejected", "submitted"])
       .lte("due_date", today);
@@ -71,15 +75,17 @@ export default async function ChildHome({
 
     const [balanceRes, childRow, streakRes] = await Promise.all([
       getChildBalance(session.childId),
-      admin.from("children").select("lifetime_stars, current_dream_reward_id, family_id").eq("id", session.childId).single(),
+      admin.from("children").select("lifetime_stars, current_dream_reward_id, family_id, date_of_birth").eq("id", session.childId).single(),
       getStreak(session.childId),
     ]);
 
     coin = balanceRes.coin;
-    lifetimeStars = childRow.data?.lifetime_stars ?? 0;
-    dreamRewardId = childRow.data?.current_dream_reward_id ?? null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    childRowData = childRow.data as any;
+    lifetimeStars = childRowData?.lifetime_stars ?? 0;
+    dreamRewardId = childRowData?.current_dream_reward_id ?? null;
     streak = { current: streakRes.current, longest: streakRes.longest };
-    const familyId = childRow.data?.family_id;
+    const familyId = childRowData?.family_id;
 
     if (dreamRewardId) {
       const { data: dr } = await admin.from("rewards").select("name, coin_cost").eq("id", dreamRewardId).single();
@@ -136,30 +142,77 @@ export default async function ChildHome({
       }
     }
 
-    // --- Quest Pool ---
+    // --- Quest Pool (age-aware ranking when child has date_of_birth) ---
     if (familyId) {
+      // Reuse date_of_birth from initial childRow query (no extra DB call)
+      const childDateOfBirth = childRowData?.date_of_birth ?? null;
+      let childAge: number | null = null;
+      if (childDateOfBirth) {
+        const birth = new Date(childDateOfBirth);
+        const now = new Date();
+        childAge = now.getFullYear() - birth.getFullYear();
+        const m = now.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) childAge--;
+      }
+
       const [cfgRes, claimsRes, refreshRes, poolRes] = await Promise.all([
         admin.from("child_pool_config").select("max_claims_per_day, pool_size").eq("child_id", session.childId).maybeSingle(),
         admin.from("pool_claims").select("task_id, assignment_id").eq("child_id", session.childId).eq("claimed_date", today),
         admin.from("pool_refresh_log").select("id").eq("child_id", session.childId).eq("refresh_date", today).maybeSingle(),
         admin.from("tasks")
-          .select("id, name, category, coin_reward, star_reward, requires_approval, behavior_type")
+          .select("id, name, name_vi, description, description_vi, category, coin_reward, star_reward, requires_approval, behavior_type, skill_domain, recommended_age, min_age, max_age, independence_level, difficulty, availability_type")
           .eq("family_id", familyId)
           .eq("in_pool", true)
           .eq("active", true),
       ]);
 
       poolMaxPerDay = cfgRes.data?.max_claims_per_day ?? 1;
-      const displaySize = cfgRes.data?.pool_size ?? POOL_DISPLAY_SIZE;
+      const configPoolSize = cfgRes.data?.pool_size ?? POOL_DISPLAY_SIZE;
+      const displaySize = childAge != null ? poolSizeForAge(childAge) : configPoolSize;
       canRefresh = !refreshRes.data;
 
       const claimedTaskIds = new Set((claimsRes.data ?? []).map((c) => c.task_id));
       const claimedAssignmentIds = (claimsRes.data ?? []).map((c) => c.assignment_id);
       claimsToday = claimedTaskIds.size;
 
-      // Pool tasks = active pool tasks not yet claimed today, up to displaySize
+      // Pool tasks: filter out claimed, then rank by age if available
       const allPool: PoolTask[] = (poolRes.data ?? []) as PoolTask[];
-      poolTasks = allPool.filter((t) => !claimedTaskIds.has(t.id)).slice(0, displaySize);
+      const unclaimed = allPool.filter((t) => !claimedTaskIds.has(t.id));
+
+      if (childAge != null && unclaimed.length > displaySize) {
+        // Fetch recent completions for ranking (last 14 days)
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const { data: recentComps } = await admin
+          .from("task_completions")
+          .select("assignment:task_assignments(task:tasks(name, skill_domain)), completed_at")
+          .eq("assignment.child_id", session.childId)
+          .gte("completed_at", twoWeeksAgo.toISOString());
+
+        const recentCompletions = (recentComps ?? []).map((c: any) => {
+          const assignment = Array.isArray(c.assignment) ? c.assignment[0] : c.assignment;
+          const task = assignment?.task;
+          const taskObj = Array.isArray(task) ? task[0] : task;
+          return {
+            task_name: taskObj?.name ?? "",
+            skill_domain: taskObj?.skill_domain ?? null,
+            completed_at: c.completed_at ?? "",
+          };
+        });
+
+        const ranked = rankTemplates(
+          unclaimed as any,
+          {
+            childAge,
+            recentCompletions,
+            activeTaskNames: new Set(unclaimed.map((t) => t.name)),
+            limit: displaySize,
+          }
+        );
+        poolTasks = ranked as unknown as PoolTask[];
+      } else {
+        poolTasks = unclaimed.slice(0, displaySize);
+      }
 
       // Claimed pool assignments already in today's task list
       if (claimedAssignmentIds.length > 0) {
@@ -175,9 +228,54 @@ export default async function ChildHome({
     fetchError = true;
   }
 
+  // Fetch OPEN repair items for this child (responsibility_events)
+  type RepairItem = { id: string; taskName: string; eventType: string; occurredAt: string };
+  let repairItems: RepairItem[] = [];
+  try {
+    const { data: repairRows } = await admin
+      .from("responsibility_events")
+      .select("id, event_type, occurred_at, task:tasks(name, name_vi)")
+      .eq("child_id", session.childId)
+      .eq("status", "OPEN")
+      .order("occurred_at", { ascending: true });
+    repairItems = (repairRows ?? []).map((r: any) => {
+      const task = Array.isArray(r.task) ? r.task[0] : r.task;
+      const taskName = (locale === "vi" && task?.name_vi) ? task.name_vi : (task?.name ?? "");
+      return { id: r.id, taskName, eventType: r.event_type, occurredAt: r.occurred_at };
+    });
+  } catch (e) {
+    console.error("[ChildHome] repair items fetch:", e);
+  }
+
+  // Pick localized name/description for a task object — falls back to English
+  function localName(task: any): string {
+    return (locale === "vi" && task?.name_vi) ? task.name_vi : (task?.name ?? "");
+  }
+  function localDesc(task: any): string | null {
+    if (locale === "vi" && task?.description_vi) return task.description_vi;
+    return task?.description ?? null;
+  }
+
   const level = getLevelInfo(lifetimeStars);
   const levelTitle = locale === "vi" ? level.title_vi : level.title_en;
   const lvIcon = levelIcon(level.level);
+
+  // Derive age tier for UX adaptation — reuse date_of_birth from initial childRow query
+  let childAgeTier: "default" | "young" | "middle" | "teen" = "default";
+  let childAgeVal: number | null = null;
+  {
+    const dob = childRowData?.date_of_birth ?? undefined;
+    if (dob) {
+      const birth = new Date(dob);
+      const now = new Date();
+      childAgeVal = now.getFullYear() - birth.getFullYear();
+      const m = now.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) childAgeVal--;
+      childAgeTier = childAgeVal <= 9 ? "young" : childAgeVal <= 12 ? "middle" : "teen";
+    }
+  }
+  const isTeen = childAgeTier === "teen";
+  const isMiddle = childAgeTier === "middle";
 
   // Separate submitted (pending approval) from actionable tasks
   const actionable = (todos ?? []).filter((a) => a.status === "todo" || a.status === "rejected");
@@ -204,7 +302,7 @@ export default async function ChildHome({
   });
 
   // Fetch reward progress for habit_building tasks
-  let rewardProgress = new Map<string, { reward_stage: string; completions: number }>();
+  const rewardProgress = new Map<string, { reward_stage: string; completions: number }>();
   try {
     const habitTaskIds = habitBuilding.map((a) => {
       const task = Array.isArray(a.task) ? a.task[0] : a.task;
@@ -360,12 +458,23 @@ export default async function ChildHome({
         </section>
       )}
 
-      {/* � Responsibilities — no coins, just do it */}
-      {responsibilities.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-emerald-700">
-            🌱 {t("child.responsibilities")}
-          </h2>
+      {/* 🌱 Repair items — things to fix, no reward */}
+      {repairItems.length > 0 && (
+        <RepairSection
+          items={repairItems}
+          action={resolveRepairAction}
+          labels={{
+            repairSection: t("child.repairSection"),
+            repairPrompt: t("child.repairPrompt"),
+            repairDone: t("child.repairDone"),
+            repairResolved: t("child.repairResolved"),
+          }}
+        />
+      )}
+
+      {/* 🌱 Responsibilities — no coins, just do it */}
+      {responsibilities.length > 0 && (() => {
+        const responsibilitiesList = (
           <ul className="space-y-2">
             {responsibilities.map((a) => {
               const task = Array.isArray(a.task) ? a.task[0] : a.task;
@@ -379,7 +488,12 @@ export default async function ChildHome({
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 shadow-sm">
                       <div className="flex items-center gap-3">
                         <span className="text-lg shrink-0">{cat.icon}</span>
-                        <div className="font-semibold text-stone-800 flex-1 min-w-0 truncate">{task?.name}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-stone-800 truncate">{localName(task)}</div>
+                          {localDesc(task) && (
+                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                          )}
+                        </div>
                       </div>
                       <EvidenceCapture
                         assignmentId={a.id}
@@ -396,8 +510,29 @@ export default async function ChildHome({
               );
             })}
           </ul>
-        </section>
-      )}
+        );
+        // Teens: collapse responsibilities by default (they're routine)
+        return isTeen ? (
+          <Collapsible
+            trigger={
+              <h2 className="flex items-center gap-2 text-base font-bold text-emerald-700">
+                🌱 {t("child.responsibilities")}
+                <span className="text-xs font-normal text-stone-400">({responsibilities.length})</span>
+              </h2>
+            }
+            defaultOpen={false}
+          >
+            {responsibilitiesList}
+          </Collapsible>
+        ) : (
+          <section>
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-emerald-700">
+              🌱 {t("child.responsibilities")}
+            </h2>
+            {responsibilitiesList}
+          </section>
+        );
+      })()}
 
       {/* 🌟 Habit Building — shows reward stage */}
       {habitBuilding.length > 0 && (
@@ -418,7 +553,10 @@ export default async function ChildHome({
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{cat.icon}</span>
                     <div>
-                      <div className="font-semibold text-stone-800">{task?.name}</div>
+                      <div className="font-semibold text-stone-800">{localName(task)}</div>
+                      {localDesc(task) && (
+                        <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                      )}
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${stg.color}`}>
                           {stg.icon} {locale === "vi" ? stg.label_vi : stg.label_en}
@@ -460,10 +598,10 @@ export default async function ChildHome({
         </section>
       )}
 
-      {/* 🎯 Core Quests — challenges */}
+      {/* 🎯 Core Quests / My Priorities (teen) */}
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
-          🎯 {t("child.coreQuests")}
+          🎯 {isTeen ? t("child.myPriorities") : t("child.coreQuests")}
         </h2>
         {!coreTasks.length && !responsibilities.length && !habitBuilding.length && !characterFamily.length ? (
           <Card className="border-emerald-200 bg-emerald-50">
@@ -485,11 +623,24 @@ export default async function ChildHome({
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-xl">{cat.icon}</span>
                         <div>
-                          <div className="font-semibold text-stone-800">{task?.name}</div>
+                          <div className="font-semibold text-stone-800">{localName(task)}</div>
+                          {localDesc(task) && (
+                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                          )}
                           <div className="flex items-center gap-2 text-xs mt-0.5">
                             <span className={`font-medium ${cat.color}`}>{t(`tasks.cat.${task?.category ?? "learning"}`)}</span>
-                            <span className="font-medium text-amber-600">🪙 +{task?.coin_reward}</span>
-                            {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
+                            {/* Teens: de-emphasize coins, emphasize stars */}
+                            {isTeen ? (
+                              <>
+                                {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
+                                {task?.coin_reward ? <span className="text-stone-400">🪙 +{task.coin_reward}</span> : null}
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-medium text-amber-600">🪙 +{task?.coin_reward}</span>
+                                {task?.star_reward ? <span className="font-medium text-purple-600">⭐ +{task.star_reward}</span> : null}
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -528,7 +679,10 @@ export default async function ChildHome({
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{bStyle.icon}</span>
                     <div>
-                      <div className="font-semibold text-stone-800">{task?.name}</div>
+                      <div className="font-semibold text-stone-800">{localName(task)}</div>
+                      {localDesc(task) && (
+                        <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                      )}
                       <div className="flex items-center gap-2 text-xs mt-0.5">
                         <span className={`font-medium ${bStyle.color}`}>{locale === "vi" ? bStyle.label_vi : bStyle.label_en}</span>
                         {task?.coin_reward > 0 && <span className="font-medium text-amber-600">🪙 +{task.coin_reward}</span>}
@@ -571,7 +725,10 @@ export default async function ChildHome({
                         <div className="flex items-center gap-2">
                           <span className="text-xl">{cat.icon}</span>
                           <div>
-                            <div className="font-semibold text-stone-800">{task?.name}</div>
+                            <div className="font-semibold text-stone-800">{localName(task)}</div>
+                            {localDesc(task) && (
+                              <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{localDesc(task)}</div>
+                            )}
                             <div className="text-[10px] font-medium text-violet-500">✨ {t("child.pickAQuest")}</div>
                           </div>
                         </div>
@@ -603,7 +760,7 @@ export default async function ChildHome({
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-bold text-violet-700">
-              ✨ {t("child.pickAQuest")}
+              ✨ {isTeen ? t("child.chooseChallenge") : t("child.pickAQuest")}
             </h2>
             {claimsToday < poolMaxPerDay && poolTasks.length > 0 && (
               <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-600">
@@ -636,8 +793,15 @@ export default async function ChildHome({
                       <div className="mb-3">
                         <div className="mb-1 flex items-center gap-1.5">
                           <span className="text-lg">{cat.icon}</span>
-                          <span className="text-xs font-semibold text-stone-700 leading-tight">{task.name}</span>
+                          <span className="text-xs font-semibold text-stone-700 leading-tight">
+                            {(locale === "vi" && task.name_vi) ? task.name_vi : task.name}
+                          </span>
                         </div>
+                        {((locale === "vi" && task.description_vi) ? task.description_vi : task.description) && (
+                          <div className="text-[10px] text-stone-500 line-clamp-2 mb-1">
+                            {(locale === "vi" && task.description_vi) ? task.description_vi : task.description}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 text-xs">
                           <span className="font-medium text-amber-600">🪙 +{task.coin_reward}</span>
                           {task.star_reward ? (
@@ -693,7 +857,7 @@ export default async function ChildHome({
               return (
                 <li key={a.id} className="flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-stone-500">
                   <span>{cat.icon}</span>
-                  <span className="flex-1">{task?.name}</span>
+                  <span className="flex-1">{localName(task)}</span>
                   <span className="text-xs text-amber-500">⏳ {t("child.waiting")}</span>
                 </li>
               );

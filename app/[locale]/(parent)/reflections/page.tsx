@@ -1,7 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Collapsible } from "@/components/ui/Collapsible";
@@ -25,16 +23,14 @@ export default async function ReflectionsPage({
   setRequestLocale(locale);
   const t = await getTranslations();
 
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
   const weekStart = currentWeekStart();
 
-  const childrenQ = supabase.from("children").select("id, name, avatar_url");
-  if (DEV_BYPASS) childrenQ.eq("family_id", DEV_FAMILY_ID);
-  const { data: children } = await childrenQ.order("created_at");
+  const { data: children } = await supabase.from("children").select("id, name, avatar_url").eq("family_id", familyId).order("created_at");
 
   const { data: existing } = await supabase
     .from("weekly_reflections")
-    .select("*")
+    .select("id, child_id, week_start, highlights, growth_note, parent_message, tasks_completed, coins_earned, stars_earned, child_read_at")
     .eq("week_start", weekStart);
 
   const reflectionMap = new Map(

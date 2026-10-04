@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 30_000;
 const PULL_THRESHOLD = 72; // px to pull before triggering refresh
 
 export function RealtimeRefresher() {
@@ -32,9 +32,17 @@ export function RealtimeRefresher() {
   };
 
   useEffect(() => {
+    let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") { router.refresh(); startPolling(); }
-      else stopPolling();
+      if (document.visibilityState === "visible") {
+        // Debounce: only refresh if the tab was hidden for more than 3s
+        // (avoids fighting with Next.js Link navigation)
+        visibilityTimer = setTimeout(() => { router.refresh(); }, 3_000);
+        startPolling();
+      } else {
+        if (visibilityTimer) { clearTimeout(visibilityTimer); visibilityTimer = null; }
+        stopPolling();
+      }
     };
     startPolling();
     document.addEventListener("visibilitychange", handleVisibilityChange);

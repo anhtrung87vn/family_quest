@@ -1,0 +1,39 @@
+@startuml Quest_Pool_Flow
+!theme plain
+title Use Case Flow: Quest Pool Selection
+
+|Child|
+start
+:Open Quests tab;
+:View available pool quests;
+
+|System|
+:Load tasks where\navailability = choice_pool or both;
+:Check child_pool_config\n(daily/weekly limits);
+:Filter out already claimed;
+
+|Child|
+:Browse available quests;
+:Tap quest to claim;
+
+|System|
+if (Under daily limit?) then (yes)
+  if (Under weekly limit?) then (yes)
+    :Create task_assignment\n(source = choice_pool);
+    :Record pool_claim;
+
+    |Child|
+    :Quest added to\nToday's Tasks;
+    :Can now submit\nwhen done;
+
+  else (no)
+    |Child|
+    :Show "Weekly limit\nreached" message;
+  endif
+else (no)
+  |Child|
+  :Show "Daily limit\nreached" message;
+endif
+
+stop
+@enduml

@@ -1,0 +1,75 @@
+@startuml Task_Completion_Flow
+!theme plain
+title Use Case Flow: Task Completion & Approval
+
+|Child|
+start
+:Open App & Login with PIN;
+:View Today's Tasks\n(grouped by behavior type);
+:Select a task;
+
+if (Evidence required?) then (yes)
+  :Upload evidence\n(photo / audio / text);
+else (no)
+endif
+
+:Press **"I'm Done!"**;
+:Task status -> **submitted**;
+
+|Parent|
+:Receive notification\nin Approvals queue;
+:Review submitted task;
+
+if (Evidence attached?) then (yes)
+  :Review evidence;
+endif
+
+if (Approve?) then (yes)
+  :Press **Approve**;
+  :Write celebration message\n(optional);
+
+  |System|
+  :Check behavior_type;
+
+  if (behavior = responsibility?) then (yes)
+    :Award Stars only\n(no coins);
+  else (no)
+    :Check reward_stage\n(habit fading);
+
+    if (stage = full_reward?) then (yes)
+      :Award 100% Coins + 100% Stars;
+    elseif (stage = reduced_reward?) then (yes)
+      :Award 50% Coins + 100% Stars;
+    elseif (stage = stars_only?) then (yes)
+      :Award 0% Coins + 100% Stars;
+    else (graduated)
+      :Award nothing;
+    endif
+  endif
+
+  :Insert coin_transaction\n(append-only ledger);
+  :Insert star_transaction\n(append-only ledger);
+  :Update child streak;
+  :Check & award badges;
+  :Task status -> **approved**;
+
+  |Child|
+  :See celebration animation;
+  :Balance updated;
+
+else (no)
+  |Parent|
+  :Press **Reject**;
+  :Add parent note (reason);
+
+  |System|
+  :Task status -> **rejected**;
+  :No coins/stars awarded;
+
+  |Child|
+  :See rejection notice;
+  :Task returns to todo;
+endif
+
+stop
+@enduml

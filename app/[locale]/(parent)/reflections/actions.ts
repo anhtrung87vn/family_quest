@@ -3,22 +3,11 @@
 import "@/lib/dev-tls-patch";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID, DEV_USER_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
+import { assertChildInFamily } from "@/lib/authz";
 
-async function requireFamily() {
-  if (DEV_BYPASS) {
-    return { supabase: createAdminClient(), userId: DEV_USER_ID, familyId: DEV_FAMILY_ID };
-  }
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Unauthorized");
-  const { data: me } = await supabase
-    .from("users").select("family_id").eq("id", auth.user.id).single();
-  if (!me?.family_id) throw new Error("No family");
-  return { supabase, userId: auth.user.id, familyId: me.family_id as string };
-}
+const requireFamily = resolveContext;
 
 const reflectionSchema = z.object({
   child_id: z.string().uuid(),
@@ -37,6 +26,9 @@ export async function saveReflection(formData: FormData) {
     parent_message: formData.get("parent_message") || null,
   });
   const { supabase, userId, familyId } = await requireFamily();
+  // The stats queries below are keyed only by child_id, so without this the
+  // reflection would aggregate another family's child.
+  await assertChildInFamily(parsed.child_id, familyId);
 
   // Compute weekly stats
   const weekEnd = new Date(parsed.week_start);

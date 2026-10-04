@@ -1,0 +1,46 @@
+@startuml Parent_Auth_Flow
+!theme plain
+title Use Case Flow: Parent Authentication
+
+|Parent|
+start
+:Visit BloomQuest;
+:Click **Parent Login**;
+
+if (Login method?) then (Google)
+  :Click **Sign in with Google**;
+
+  |System|
+  :Redirect to Google OAuth;
+
+  |Parent|
+  :Authorize on Google;
+
+  |System|
+  :Receive OAuth callback;
+  :Create/find user in Supabase Auth;
+
+  if (First login?) then (yes)
+    :Auto-create family;
+    :Link user to family;
+  endif
+
+  :Set session cookie via\n@supabase/ssr middleware;
+
+else (Email/Password)
+  |Parent|
+  :Enter email + password;
+
+  |System|
+  :Verify credentials via\nSupabase Auth;
+  :Set session cookie;
+endif
+
+|System|
+:Redirect to /{locale}/(parent)/dashboard;
+
+|Parent|
+:See Family Dashboard;
+
+stop
+@enduml

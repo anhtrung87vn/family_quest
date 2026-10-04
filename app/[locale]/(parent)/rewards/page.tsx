@@ -1,11 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { CloneRewardsButton } from "./CloneRewardsButton";
+import { ResetRewardsButton } from "./ResetRewardsButton";
 import { RewardList } from "./RewardList";
 import { CreateRewardForm } from "./CreateRewardForm";
 
@@ -16,11 +15,9 @@ export default async function RewardsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
-  const rewardsQ = supabase.from("rewards").select("*").eq("is_system_template", false);
-  if (DEV_BYPASS) rewardsQ.eq("family_id", DEV_FAMILY_ID);
-  const { data: rewards } = await rewardsQ.order("coin_cost");
+  const { data: rewards } = await supabase.from("rewards").select("id, name, description, category, coin_cost, stock, active, dream_eligible, image_url, link_url").eq("is_system_template", false).eq("family_id", familyId).order("coin_cost");
 
   // Separate dream-eligible from normal
   const dreamRewards = (rewards ?? []).filter((r) => r.dream_eligible);
@@ -64,6 +61,14 @@ export default async function RewardsPage({
         </Collapsible>
       </Card>
 
+      {/* Reset & reclone templates */}
+      <ResetRewardsButton
+        label={t("parent.dangerResetRecloneRewards")}
+        desc={t("parent.dangerResetRecloneRewardsDesc")}
+        confirmLabel={t("parent.dangerResetRecloneConfirm")}
+        cancelLabel={t("parent.dangerCancel")}
+      />
+
       {/* Dream rewards section */}
       {dreamRewards.length > 0 && (
         <section>
@@ -81,8 +86,8 @@ export default async function RewardsPage({
                 stock: r.stock ?? null,
                 active: r.active,
                 dream_eligible: r.dream_eligible,
-                image_url: (r as any).image_url ?? null,
-                link_url: (r as any).link_url ?? null,
+                image_url: r.image_url ?? null,
+                link_url: r.link_url ?? null,
               }))}
               labels={{
                 search: "",
@@ -125,8 +130,8 @@ export default async function RewardsPage({
               stock: r.stock ?? null,
               active: r.active,
               dream_eligible: r.dream_eligible,
-              image_url: (r as any).image_url ?? null,
-              link_url: (r as any).link_url ?? null,
+              image_url: r.image_url ?? null,
+              link_url: r.link_url ?? null,
             }))}
             labels={{
               search: t("rewards.search"),

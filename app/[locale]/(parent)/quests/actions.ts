@@ -3,22 +3,11 @@
 import "@/lib/dev-tls-patch";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID, DEV_USER_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
+import { assertChildInFamily, assertQuestInFamily } from "@/lib/authz";
 
-async function requireFamily() {
-  if (DEV_BYPASS) {
-    return { supabase: createAdminClient(), userId: DEV_USER_ID, familyId: DEV_FAMILY_ID };
-  }
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Unauthorized");
-  const { data: me } = await supabase
-    .from("users").select("family_id").eq("id", auth.user.id).single();
-  if (!me?.family_id) throw new Error("No family");
-  return { supabase, userId: auth.user.id, familyId: me.family_id as string };
-}
+const requireFamily = resolveContext;
 
 const questSchema = z.object({
   title: z.string().min(1).max(100),
@@ -50,7 +39,12 @@ export async function createFamilyQuest(formData: FormData) {
 export async function contributeToQuest(formData: FormData) {
   const quest_id = z.string().uuid().parse(formData.get("quest_id"));
   const child_id = z.string().uuid().parse(formData.get("child_id"));
-  const { supabase } = await requireFamily();
+  const { supabase, familyId } = await requireFamily();
+
+  await Promise.all([
+    assertQuestInFamily(quest_id, familyId),
+    assertChildInFamily(child_id, familyId),
+  ]);
 
   // Upsert member contribution
   const { data: existing } = await supabase
@@ -80,7 +74,7 @@ export async function contributeToQuest(formData: FormData) {
       updates.status = "completed";
       updates.completed_at = new Date().toISOString();
     }
-    await supabase.from("family_quests").update(updates).eq("id", quest_id);
+    await supabase.from("family_quests").update(updates).eq("id", quest_id).eq("family_id", familyId);
   }
 
   revalidatePath("/[locale]/quests", "page");
@@ -89,8 +83,12 @@ export async function contributeToQuest(formData: FormData) {
 
 export async function cancelQuest(formData: FormData) {
   const quest_id = z.string().uuid().parse(formData.get("quest_id"));
-  const { supabase } = await requireFamily();
-  await supabase.from("family_quests").update({ status: "cancelled" }).eq("id", quest_id);
+  const { supabase, familyId } = await requireFamily();
+  await supabase
+    .from("family_quests")
+    .update({ status: "cancelled" })
+    .eq("id", quest_id)
+    .eq("family_id", familyId);
   revalidatePath("/[locale]/quests", "page");
 }
 
@@ -101,7 +99,7 @@ export async function cloneQuestTemplates() {
   const admin = createAdminClient();
   const { data: templates, error: fetchErr } = await admin
     .from("family_quests")
-    .select("title, description, target_count, coin_reward, star_reward")
+    .select("title, title_vi, description, description_vi, target_count, coin_reward, star_reward")
     .eq("family_id", "00000000-0000-0000-0000-000000000000")
     .eq("is_system_template", true);
   if (fetchErr) throw fetchErr;
@@ -130,4 +128,39 @@ export async function cloneQuestTemplates() {
   }
 
   revalidatePath("/[locale]/quests", "page");
+}
+
+export async function resetAndRecloneQuests() {
+  const { supabase, userId, familyId } = await requireFamily();
+  const admin = createAdminClient();
+
+  // Cancel all active family quests (not system templates)
+  const { error: cancelErr } = await supabase
+    .from("family_quests")
+    .update({ status: "cancelled" })
+    .eq("family_id", familyId)
+    .eq("status", "active")
+    .eq("is_system_template", false);
+  if (cancelErr) throw cancelErr;
+
+  // Fetch system templates including title_vi / description_vi
+  const { data: templates, error: fetchErr } = await admin
+    .from("family_quests")
+    .select("title, title_vi, description, description_vi, target_count, coin_reward, star_reward")
+    .eq("family_id", "00000000-0000-0000-0000-000000000000")
+    .eq("is_system_template", true);
+  if (fetchErr) throw fetchErr;
+  if (!templates?.length) return;
+
+  const rows = templates.map((t) => ({
+    ...t,
+    family_id: familyId,
+    is_system_template: false,
+    created_by: userId,
+    status: "active",
+  }));
+  const { error: insertErr } = await supabase.from("family_quests").insert(rows);
+  if (insertErr) throw insertErr;
+
+  revalidatePath("/[locale]/(parent)/quests", "page");
 }

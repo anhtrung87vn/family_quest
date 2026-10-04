@@ -1,0 +1,22 @@
+@startuml Data_Backup_Flow
+!theme plain
+title Use Case Flow: Data Backup
+
+|Parent|
+start
+:Navigate to Settings or\nDashboard;
+:Click **Backup Data**;
+
+|System|
+:POST /api/backup;
+:Authenticate parent session;
+:Query all family data:\n- children\n- tasks & assignments\n- completions\n- rewards & redemptions\n- coin/star transactions\n- evidence metadata\n- streaks, badges\n- messages, memories;
+:Serialize to JSON;
+:Return as downloadable file;
+
+|Parent|
+:Download backup file;
+:Store securely;
+
+stop
+@enduml

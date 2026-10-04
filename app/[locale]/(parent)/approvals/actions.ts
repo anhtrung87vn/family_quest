@@ -12,6 +12,14 @@ import {
 } from "@/lib/ledger";
 import { checkAndAwardBadges } from "@/lib/badges";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveContext } from "@/lib/dev-family";
+import {
+  assertChildInFamily,
+  assertCompletionInFamily,
+  assertEvidenceInFamily,
+  assertRedemptionInFamily,
+  assertStoragePathInFamily,
+} from "@/lib/authz";
 
 export async function approveCompletion(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
@@ -21,104 +29,70 @@ export async function approveCompletion(formData: FormData) {
   const mediaType = (formData.get("media_type") as string) || null;
   const audioFile = formData.get("audio_file") as File | null;
   const audioType = (formData.get("audio_type") as string) || null;
-  console.log("[approveCompletion] mediaFile:", mediaFile?.name, "size:", mediaFile?.size, "type:", mediaFile?.type, "mediaType:", mediaType);
-  console.log("[approveCompletion] audioFile:", audioFile?.name, "size:", audioFile?.size, "type:", audioFile?.type);
+
+  // Authorize BEFORE mutating: the completion must belong to the caller's family.
+  const { familyId, userId: parentUserId } = await resolveContext();
+  const { childId } = await assertCompletionInFamily(id, familyId);
+
   await awardTask(id, note);
 
   const admin = createAdminClient();
 
-  // Resolve completion → assignment → child + family
-  const { data: tc } = await admin
-    .from("task_completions")
-    .select("assignment_id")
-    .eq("id", id)
-    .single();
-
-  if (tc) {
-    const { data: a } = await admin
-      .from("task_assignments")
-      .select("child_id")
-      .eq("id", tc.assignment_id)
-      .single();
-
-    if (a?.child_id) {
-      if (celebration) {
-        await admin.from("task_completions").update({ celebration_message: celebration }).eq("id", id);
-      }
-
-      const { data: childRow } = await admin
-        .from("children")
-        .select("family_id")
-        .eq("id", a.child_id)
-        .single();
-      const familyId = childRow?.family_id;
-
-      const { DEV_BYPASS, DEV_USER_ID } = await import("@/lib/dev-family");
-      let parentUserId: string | null = DEV_BYPASS ? DEV_USER_ID : null;
-      if (!DEV_BYPASS) {
-        const { createClient } = await import("@/lib/supabase/server");
-        const supabase = await createClient();
-        const { data: auth } = await supabase.auth.getUser();
-        parentUserId = auth?.user?.id ?? null;
-      }
-
-      const finalMessage = celebration || "Làm tốt lắm! Tiếp tục nhé!";
-
-      if (familyId) {
-        const ALLOWED_PHOTO = ["image/jpeg", "image/png", "image/webp"];
-        const ALLOWED_AUDIO = ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/x-m4a"];
-        const MEDIA_MAX = 20 * 1024 * 1024;
-
-        const uploadMedia = async (file: File, type: "photo" | "audio", suffix: string): Promise<{ path: string; mime: string } | null> => {
-          const allowed = type === "photo" ? ALLOWED_PHOTO : ALLOWED_AUDIO;
-          const mimeOk = allowed.some((p) => file.type === p || file.type.startsWith(p + ";"));
-          if (!mimeOk || file.size > MEDIA_MAX) return null;
-          const ext = file.name.split(".").pop() || (type === "photo" ? "jpg" : "webm");
-          const path = `${familyId}/${a.child_id}/${id}-${suffix}.${ext}`;
-          const buf = await file.arrayBuffer();
-          const { error } = await admin.storage.from("parent-messages").upload(path, buf, { contentType: file.type, upsert: true });
-          if (error) { console.error(`[approveCompletion] upload ${suffix} failed:`, error); return null; }
-          return { path, mime: file.type };
-        };
-
-        // Upload photo
-        let photoPath: string | null = null;
-        let photoMime: string | null = null;
-        if (mediaFile && mediaFile.size > 0 && mediaType === "photo") {
-          const r = await uploadMedia(mediaFile, "photo", "approval-photo");
-          if (r) { photoPath = r.path; photoMime = r.mime; }
-        }
-
-        // Upload audio
-        let audioPath: string | null = null;
-        let audioMime: string | null = null;
-        if (audioFile && audioFile.size > 0 && audioType === "audio") {
-          const r = await uploadMedia(audioFile, "audio", "approval-audio");
-          if (r) { audioPath = r.path; audioMime = r.mime; }
-        }
-
-        // Insert a single message with both photo and audio (new columns audio_path/audio_mime)
-        const { error: msgErr } = await admin.from("parent_messages").insert({
-          family_id: familyId,
-          child_id: a.child_id,
-          parent_user_id: parentUserId,
-          message_type: "QUEST_APPROVAL",
-          message: finalMessage,
-          reference_id: id,
-          media_type: photoPath ? "photo" : (audioPath ? "audio" : null),
-          media_path: photoPath ?? audioPath,
-          media_mime: photoPath ? photoMime : (audioPath ? audioMime : null),
-          audio_path: photoPath ? audioPath : null,
-          audio_mime: photoPath ? audioMime : null,
-        });
-        if (msgErr) console.error("[approveCompletion] parent_messages insert failed:", msgErr);
-      } else {
-        console.error("[approveCompletion] no familyId resolved for child:", a.child_id);
-      }
-
-      await checkAndAwardBadges(a.child_id);
-    }
+  if (celebration) {
+    await admin.from("task_completions").update({ celebration_message: celebration }).eq("id", id);
   }
+
+  const finalMessage = celebration || "Làm tốt lắm! Tiếp tục nhé!";
+
+  const ALLOWED_PHOTO = ["image/jpeg", "image/png", "image/webp"];
+  const ALLOWED_AUDIO = ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/x-m4a"];
+  const MEDIA_MAX = 20 * 1024 * 1024;
+
+  const uploadMedia = async (file: File, type: "photo" | "audio", suffix: string): Promise<{ path: string; mime: string } | null> => {
+    const allowed = type === "photo" ? ALLOWED_PHOTO : ALLOWED_AUDIO;
+    const mimeOk = allowed.some((p) => file.type === p || file.type.startsWith(p + ";"));
+    if (!mimeOk || file.size > MEDIA_MAX) return null;
+    const ext = file.name.split(".").pop() || (type === "photo" ? "jpg" : "webm");
+    const path = `${familyId}/${childId}/${id}-${suffix}.${ext}`;
+    const buf = await file.arrayBuffer();
+    const { error } = await admin.storage.from("parent-messages").upload(path, buf, { contentType: file.type, upsert: true });
+    if (error) { console.error(`[approveCompletion] upload ${suffix} failed:`, error); return null; }
+    return { path, mime: file.type };
+  };
+
+  // Upload photo
+  let photoPath: string | null = null;
+  let photoMime: string | null = null;
+  if (mediaFile && mediaFile.size > 0 && mediaType === "photo") {
+    const r = await uploadMedia(mediaFile, "photo", "approval-photo");
+    if (r) { photoPath = r.path; photoMime = r.mime; }
+  }
+
+  // Upload audio
+  let audioPath: string | null = null;
+  let audioMime: string | null = null;
+  if (audioFile && audioFile.size > 0 && audioType === "audio") {
+    const r = await uploadMedia(audioFile, "audio", "approval-audio");
+    if (r) { audioPath = r.path; audioMime = r.mime; }
+  }
+
+  // Insert a single message with both photo and audio (new columns audio_path/audio_mime)
+  const { error: msgErr } = await admin.from("parent_messages").insert({
+    family_id: familyId,
+    child_id: childId,
+    parent_user_id: parentUserId,
+    message_type: "QUEST_APPROVAL",
+    message: finalMessage,
+    reference_id: id,
+    media_type: photoPath ? "photo" : (audioPath ? "audio" : null),
+    media_path: photoPath ?? audioPath,
+    media_mime: photoPath ? photoMime : (audioPath ? audioMime : null),
+    audio_path: photoPath ? audioPath : null,
+    audio_mime: photoPath ? audioMime : null,
+  });
+  if (msgErr) console.error("[approveCompletion] parent_messages insert failed:", msgErr);
+
+  await checkAndAwardBadges(childId);
 
   revalidatePath("/[locale]/approvals", "page");
   revalidatePath("/[locale]/dashboard", "page");
@@ -129,6 +103,8 @@ export async function approveCompletion(formData: FormData) {
 export async function rejectCompletion(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const note = (formData.get("note") as string) || undefined;
+  const { familyId } = await resolveContext();
+  await assertCompletionInFamily(id, familyId);
   await rejectTask(id, note);
   revalidatePath("/[locale]/approvals", "page");
 }
@@ -136,24 +112,27 @@ export async function rejectCompletion(formData: FormData) {
 export async function approveRedemptionAction(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const note = ((formData.get("note") as string) || "").trim();
+
+  const { familyId } = await resolveContext();
+  const { childId } = await assertRedemptionInFamily(id, familyId);
+
   await approveRedemption(id);
 
   // Send a message to the child notifying reward approval
   const admin = createAdminClient();
   const { data: redemption } = await admin
     .from("reward_redemptions")
-    .select("child_id, coin_cost, reward:rewards(name, family_id)")
+    .select("coin_cost, reward:rewards(name)")
     .eq("id", id)
     .single();
   if (redemption) {
     const reward = Array.isArray(redemption.reward) ? redemption.reward[0] : redemption.reward;
-    const { data: child } = await admin.from("children").select("family_id").eq("id", redemption.child_id).single();
-    if (child && reward) {
+    if (reward) {
       const baseMsg = `🎁 Yêu cầu đổi thưởng "${reward.name}" đã được duyệt! Bạn đã tiêu ${redemption.coin_cost} 🪙. Tận hưởng nhé! 🎉`;
       const message = note ? `${baseMsg}\n\n💬 ${note}` : baseMsg;
       await admin.from("parent_messages").insert({
-        family_id: child.family_id,
-        child_id: redemption.child_id,
+        family_id: familyId,
+        child_id: childId,
         message_type: "GENERAL",
         message,
         reference_id: id,
@@ -170,11 +149,14 @@ export async function rejectRedemptionAction(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const note = (formData.get("note") as string) || undefined;
 
+  const { familyId } = await resolveContext();
+  const { childId } = await assertRedemptionInFamily(id, familyId);
+
   // Fetch before rejecting so we can send a message
   const admin = createAdminClient();
   const { data: redemption } = await admin
     .from("reward_redemptions")
-    .select("child_id, coin_cost, reward:rewards(name)")
+    .select("coin_cost, reward:rewards(name)")
     .eq("id", id)
     .single();
 
@@ -182,11 +164,10 @@ export async function rejectRedemptionAction(formData: FormData) {
 
   if (redemption) {
     const reward = Array.isArray(redemption.reward) ? redemption.reward[0] : redemption.reward;
-    const { data: child } = await admin.from("children").select("family_id").eq("id", redemption.child_id).single();
-    if (child && reward) {
+    if (reward) {
       await admin.from("parent_messages").insert({
-        family_id: child.family_id,
-        child_id: redemption.child_id,
+        family_id: familyId,
+        child_id: childId,
         message_type: "GENERAL",
         message: `↩️ Yêu cầu đổi thưởng "${reward.name}" chưa được duyệt lần này. ${note ? `Ba/mẹ nhắn: ${note}` : "Hãy tiếp tục cố gắng nhé! 💪"} Xu đã được trả lại cho con.`,
         reference_id: id,
@@ -223,24 +204,9 @@ export async function sendGeneralNote(formData: FormData) {
 
   const admin = createAdminClient();
 
-  // Resolve family_id directly from children table (always reliable)
-  const { data: childRow } = await admin
-    .from("children")
-    .select("family_id")
-    .eq("id", parsed.child_id)
-    .single();
-  const familyId = childRow?.family_id;
-  if (!familyId) throw new Error("Child not found");
-
-  // Resolve parent user id
-  const { DEV_BYPASS, DEV_USER_ID } = await import("@/lib/dev-family");
-  let parentUserId: string | null = DEV_BYPASS ? DEV_USER_ID : null;
-  if (!DEV_BYPASS) {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    parentUserId = auth?.user?.id ?? null;
-  }
+  // Scope to the caller's family, then verify the child belongs to it.
+  const { familyId, userId: parentUserId } = await resolveContext();
+  await assertChildInFamily(parsed.child_id, familyId);
 
   const uploadNoteMedia = async (file: File, type: "photo" | "audio"): Promise<{ path: string; mime: string } | null> => {
     const allowed = type === "photo" ? ALLOWED_MSG_PHOTO : ALLOWED_MSG_AUDIO;
@@ -291,6 +257,11 @@ export async function sendGeneralNote(formData: FormData) {
 }
 
 export async function getParentMessageSignedUrl(mediaPath: string): Promise<string | null> {
+  // Storage keys are `<family_id>/<child_id>/...`; refuse paths outside the
+  // caller's family so an arbitrary key can't be minted into a signed URL.
+  const { familyId } = await resolveContext();
+  assertStoragePathInFamily(mediaPath, familyId);
+
   const admin = createAdminClient();
   const { data, error } = await admin.storage
     .from("parent-messages")
@@ -310,6 +281,8 @@ export async function adjustCoins(formData: FormData) {
     amount: formData.get("amount"),
     reason: formData.get("reason"),
   });
+  const { familyId } = await resolveContext();
+  await assertChildInFamily(parsed.child_id, familyId);
   await manualAdjustCoins(parsed.child_id, parsed.amount, parsed.reason);
   revalidatePath("/[locale]/approvals", "page");
   revalidatePath("/[locale]/dashboard", "page");
@@ -321,14 +294,8 @@ export async function promoteEvidence(formData: FormData) {
   const evidenceId = z.string().uuid().parse(formData.get("evidence_id"));
   const admin = createAdminClient();
 
-  const { DEV_BYPASS, DEV_USER_ID } = await import("@/lib/dev-family");
-  let userId: string | null = DEV_BYPASS ? DEV_USER_ID : null;
-  if (!DEV_BYPASS) {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    userId = auth?.user?.id ?? null;
-  }
+  const { familyId, userId } = await resolveContext();
+  await assertEvidenceInFamily(evidenceId, familyId);
 
   // Fetch full evidence row
   const { data: ev, error: evErr } = await admin
@@ -426,6 +393,9 @@ export async function deleteEvidence(formData: FormData) {
   const evidenceId = z.string().uuid().parse(formData.get("evidence_id"));
   const admin = createAdminClient();
 
+  const { familyId } = await resolveContext();
+  await assertEvidenceInFamily(evidenceId, familyId);
+
   // Get storage path before marking as deleted
   const { data: ev } = await admin
     .from("task_evidence")
@@ -456,6 +426,9 @@ export async function deleteEvidence(formData: FormData) {
 }
 
 export async function getEvidenceSignedUrl(storagePath: string): Promise<string | null> {
+  const { familyId } = await resolveContext();
+  assertStoragePathInFamily(storagePath, familyId);
+
   const admin = createAdminClient();
   const { data, error } = await admin.storage
     .from("family-evidence")

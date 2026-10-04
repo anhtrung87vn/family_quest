@@ -1,7 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { EvidenceReview, type EvidenceItem } from "@/components/ui/EvidenceReview";
 import { getEvidenceSignedUrl } from "@/app/[locale]/(parent)/approvals/actions";
@@ -17,20 +15,9 @@ export default async function EvidenceDetailPage({
   const { locale, id } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const admin = createAdminClient();
+  const { familyId, supabase } = await resolveContext();
 
-  // Validate parent family
-  let familyId: string | null = DEV_BYPASS ? DEV_FAMILY_ID : null;
-  if (!DEV_BYPASS) {
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (auth?.user) {
-      const { data: u } = await admin.from("users").select("family_id").eq("id", auth.user.id).single();
-      familyId = u?.family_id ?? null;
-    }
-  }
-
-  const { data: ev } = await admin
+  const { data: ev } = await supabase
     .from("task_evidence")
     .select("id, evidence_type, storage_path, text_content, choice_value, audio_duration, mime_type, file_size, status, expires_at, created_at, family_id, child_id, task_completion_id, memory_id, promoted_at, deleted_at, deletion_reason")
     .eq("id", id)
@@ -48,7 +35,7 @@ export default async function EvidenceDetailPage({
   // Get child name + task name
   let childName = "—";
   let taskName = "—";
-  const { data: tc } = await admin
+  const { data: tc } = await supabase
     .from("task_completions")
     .select("assignment:task_assignments(child:children(name), task:tasks(name))")
     .eq("id", ev.task_completion_id)

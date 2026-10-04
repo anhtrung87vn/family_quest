@@ -2,22 +2,12 @@
 
 import "@/lib/dev-tls-patch";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID, DEV_USER_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 
 async function getFamilyId(): Promise<string> {
-  if (DEV_BYPASS) return DEV_FAMILY_ID;
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Unauthorized");
-  const { data: me } = await supabase
-    .from("users")
-    .select("family_id")
-    .eq("id", auth.user.id)
-    .single();
-  if (!me?.family_id) throw new Error("No family");
-  return me.family_id as string;
+  const { familyId } = await resolveContext();
+  return familyId;
 }
 
 // GET /api/backup — export family data as JSON
@@ -30,28 +20,41 @@ export async function GET() {
       { data: tasks },
       { data: rewards },
       { data: children },
-      { data: assignments },
-      { data: ledger },
     ] = await Promise.all([
       admin.from("tasks").select("*").eq("family_id", familyId),
       admin.from("rewards").select("*").eq("family_id", familyId),
       admin.from("children").select("*").eq("family_id", familyId),
-      admin.from("task_assignments").select("*").in(
-        "task_id",
-        (await admin.from("tasks").select("id").eq("family_id", familyId)).data?.map((t) => t.id) ?? []
-      ),
-      admin.from("coin_ledger").select("*").eq("family_id", familyId),
+    ]);
+
+    // These depend on the ids above, so they run as a second parallel wave
+    // rather than an await nested inside the first Promise.all.
+    const taskIds = (tasks ?? []).map((t) => t.id);
+    const childIds = (children ?? []).map((c) => c.id);
+    const [{ data: assignments }, { data: coins }, { data: stars }] = await Promise.all([
+      taskIds.length
+        ? admin.from("task_assignments").select("*").in("task_id", taskIds)
+        : Promise.resolve({ data: [] as unknown[] }),
+      // The ledger tables are coin_transactions/star_transactions and are keyed by
+      // child_id — there is no `coin_ledger` table and no family_id column, so the
+      // previous query silently exported an empty ledger.
+      childIds.length
+        ? admin.from("coin_transactions").select("*").in("child_id", childIds)
+        : Promise.resolve({ data: [] as unknown[] }),
+      childIds.length
+        ? admin.from("star_transactions").select("*").in("child_id", childIds)
+        : Promise.resolve({ data: [] as unknown[] }),
     ]);
 
     const backup = {
-      version: 1,
+      version: 2,
       exported_at: new Date().toISOString(),
       family_id: familyId,
       tasks: tasks ?? [],
       rewards: rewards ?? [],
       children: children ?? [],
       task_assignments: assignments ?? [],
-      coin_ledger: ledger ?? [],
+      coin_transactions: coins ?? [],
+      star_transactions: stars ?? [],
     };
 
     const json = JSON.stringify(backup, null, 2);
@@ -77,7 +80,8 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient();
 
     const body = await req.json();
-    if (!body || body.version !== 1) {
+    // v1 and v2 differ only in the ledger keys, which restore does not read.
+    if (!body || (body.version !== 1 && body.version !== 2)) {
       return NextResponse.json({ error: "Invalid backup file (version mismatch)" }, { status: 400 });
     }
 

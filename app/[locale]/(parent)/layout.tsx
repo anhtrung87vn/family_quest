@@ -1,8 +1,7 @@
 import { redirect } from "@/lib/i18n/routing";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext, DEV_BYPASS } from "@/lib/dev-family";
 import { ParentSidebar } from "@/components/ui/ParentSidebar";
 
 export default async function ParentLayout({
@@ -14,8 +13,10 @@ export default async function ParentLayout({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  // DEV BYPASS: skip auth check so parent UI is accessible without logging in
-  if (process.env.NODE_ENV !== "development") {
+  // Auth check runs in every environment so the production auth path is also the
+  // one exercised locally. Unauthenticated dev access still works via DEV_BYPASS,
+  // which resolveContext applies below.
+  if (!DEV_BYPASS) {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     if (!data.user) redirect({ href: "/login", locale });
@@ -23,17 +24,33 @@ export default async function ParentLayout({
 
   const t = await getTranslations();
 
-  // Fetch pending counts for badge
-  const admin = DEV_BYPASS ? createAdminClient() : await createClient();
-  const [{ count: pendingTasks }, { count: pendingRewards }] = await Promise.all([
-    admin.from("task_completions").select("id", { count: "exact", head: true }).eq("status", "submitted"),
-    admin.from("reward_redemptions").select("id", { count: "exact", head: true }).eq("status", "requested"),
-  ]);
-  const pendingTotal = (pendingTasks ?? 0) + (pendingRewards ?? 0);
+  // Fetch pending counts for badge.  resolveContext now returns the user-scoped
+  // client, so RLS scopes these automatically.  The !inner joins + explicit
+  // family_id filter are kept as belt-and-suspenders.
+  let pendingTotal = 0;
+  try {
+    const { supabase, familyId } = await resolveContext();
+    const [{ count: pendingTasks }, { count: pendingRewards }] = await Promise.all([
+      supabase
+        .from("task_completions")
+        .select("id, assignment:task_assignments!inner(child:children!inner(family_id))", { count: "exact", head: true })
+        .eq("status", "submitted")
+        .eq("assignment.child.family_id", familyId),
+      supabase
+        .from("reward_redemptions")
+        .select("id, child:children!inner(family_id)", { count: "exact", head: true })
+        .eq("status", "requested")
+        .eq("child.family_id", familyId),
+    ]);
+    pendingTotal = (pendingTasks ?? 0) + (pendingRewards ?? 0);
+  } catch {
+    // No session / no family yet — badge stays at 0
+  }
 
   const navItems = [
     { href: "/dashboard", icon: "🏠", label: t("parent.overview") },
     { href: "/tasks",     icon: "✅", label: t("parent.tasks") },
+    { href: "/library",   icon: "✨", label: t("parent.questLibrary") },
     { href: "/approvals", icon: "⏳", label: t("parent.approvals"), badge: pendingTotal },
     { href: "/rewards",   icon: "🎁", label: t("parent.rewards") },
     { href: "/quests",    icon: "👭", label: t("parent.familyQuests") },

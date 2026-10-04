@@ -34,6 +34,44 @@ export function levelIcon(level: number) {
   return LEVEL_ICONS[Math.min(level - 1, LEVEL_ICONS.length - 1)] ?? "🌱";
 }
 
+// Skill domain styles (curriculum system)
+export type SkillDomain = 'LEARNING' | 'SELF_MANAGEMENT' | 'LIFE_HOME' | 'MONEY' |
+  'COMMUNICATION' | 'CHARACTER_FAMILY' | 'HEALTH' | 'DIGITAL' | 'WORLD_INDEPENDENCE';
+
+const DOMAIN_STYLES: Record<SkillDomain, { icon: string; color: string; bg: string; border: string; label_en: string; label_vi: string }> = {
+  LEARNING:           { icon: '🧠', color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-200',    label_en: 'Learning & Thinking',   label_vi: 'Học tập & Tư duy' },
+  SELF_MANAGEMENT:    { icon: '🎯', color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-amber-200',   label_en: 'Self Management',       label_vi: 'Tự quản lý' },
+  LIFE_HOME:          { icon: '🏠', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', label_en: 'Life & Home Skills',    label_vi: 'Kỹ năng sống' },
+  MONEY:              { icon: '💰', color: 'text-yellow-600',  bg: 'bg-yellow-50',  border: 'border-yellow-200',  label_en: 'Money',                 label_vi: 'Tiền bạc' },
+  COMMUNICATION:      { icon: '💬', color: 'text-cyan-600',    bg: 'bg-cyan-50',    border: 'border-cyan-200',    label_en: 'Communication',         label_vi: 'Giao tiếp' },
+  CHARACTER_FAMILY:   { icon: '❤️', color: 'text-pink-600',    bg: 'bg-pink-50',    border: 'border-pink-200',    label_en: 'Character & Family',    label_vi: 'Phẩm chất & Gia đình' },
+  HEALTH:             { icon: '🏃', color: 'text-orange-600',  bg: 'bg-orange-50',  border: 'border-orange-200',  label_en: 'Health',                label_vi: 'Sức khỏe' },
+  DIGITAL:            { icon: '💻', color: 'text-indigo-600',  bg: 'bg-indigo-50',  border: 'border-indigo-200',  label_en: 'Digital Intelligence',  label_vi: 'Kỹ năng số' },
+  WORLD_INDEPENDENCE: { icon: '🌍', color: 'text-teal-600',    bg: 'bg-teal-50',    border: 'border-teal-200',    label_en: 'World & Independence',  label_vi: 'Thế giới & Tự lập' },
+};
+
+export function domainStyle(domain: string | null | undefined) {
+  return DOMAIN_STYLES[(domain as SkillDomain) ?? 'LEARNING'] ?? DOMAIN_STYLES.LEARNING;
+}
+
+export const ALL_SKILL_DOMAINS: SkillDomain[] = [
+  'LEARNING', 'SELF_MANAGEMENT', 'LIFE_HOME', 'MONEY',
+  'COMMUNICATION', 'CHARACTER_FAMILY', 'HEALTH', 'DIGITAL', 'WORLD_INDEPENDENCE',
+];
+
+// Independence level styles
+export type IndependenceLevel = 'GUIDED' | 'SUPPORTED' | 'INDEPENDENT';
+
+const INDEPENDENCE_STYLES: Record<IndependenceLevel, { icon: string; color: string; bg: string; label_en: string; label_vi: string }> = {
+  GUIDED:      { icon: '👋', color: 'text-blue-600',    bg: 'bg-blue-50',    label_en: 'Guided',      label_vi: 'Hướng dẫn' },
+  SUPPORTED:   { icon: '🌿', color: 'text-emerald-600', bg: 'bg-emerald-50', label_en: 'Supported',   label_vi: 'Hỗ trợ' },
+  INDEPENDENT: { icon: '🦅', color: 'text-purple-600',  bg: 'bg-purple-50',  label_en: 'Independent', label_vi: 'Tự lập' },
+};
+
+export function independenceStyle(level: string | null | undefined) {
+  return INDEPENDENCE_STYLES[(level as IndependenceLevel) ?? 'GUIDED'] ?? INDEPENDENCE_STYLES.GUIDED;
+}
+
 // Behavior type styles (design: Habit Plan §5)
 export type BehaviorType = "responsibility" | "habit_building" | "challenge" | "character" | "family";
 

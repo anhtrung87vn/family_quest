@@ -1,4 +1,4 @@
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 500;
 
 /**

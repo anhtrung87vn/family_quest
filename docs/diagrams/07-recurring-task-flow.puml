@@ -1,0 +1,36 @@
+@startuml Recurring_Task_Flow
+!theme plain
+title Use Case Flow: Recurring Task Generation (Cron)
+
+|System|
+start
+:Cron triggers at 22:00 UTC;
+:POST /api/cron/generate-assignments;
+:Verify CRON_SECRET bearer token;
+
+:Query active tasks where\nis_recurring = true;
+
+repeat :For each recurring task;
+  :Parse recurrence_rule;
+  :Calculate next due_date;
+
+  if (Due tomorrow?) then (yes)
+    :Query assigned children;
+
+    repeat :For each child;
+      if (Assignment exists\nfor this date?) then (no)
+        :Create task_assignment\n(source = system,\nstatus = todo);
+      else (yes)
+        :Skip (already exists);
+      endif
+    repeat while (more children?)
+
+  else (no)
+    :Skip;
+  endif
+
+repeat while (more tasks?)
+
+:Log generation results;
+stop
+@enduml

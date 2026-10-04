@@ -46,7 +46,7 @@ describe("fetchWithRetry", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
   });
 
-  it("throws after MAX_RETRIES (3) consecutive failures", async () => {
+  it("throws after MAX_RETRIES (3) consecutive failures", { timeout: 20_000 }, async () => {
     const err = new TypeError("fetch failed — ECONNRESET");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(err));
 

@@ -3,26 +3,12 @@
 import "@/lib/dev-tls-patch";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { todayISO } from "@/lib/recurrence";
-import { DEV_BYPASS, DEV_FAMILY_ID, DEV_USER_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
+import { assertChildInFamily, assertTaskInFamily } from "@/lib/authz";
 
-async function requireFamily() {
-  if (DEV_BYPASS) {
-    return { supabase: createAdminClient(), userId: DEV_USER_ID, familyId: DEV_FAMILY_ID };
-  }
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Unauthorized");
-  const { data: me } = await supabase
-    .from("users")
-    .select("family_id")
-    .eq("id", auth.user.id)
-    .single();
-  if (!me?.family_id) throw new Error("No family");
-  return { supabase, userId: auth.user.id, familyId: me.family_id as string };
-}
+const requireFamily = resolveContext;
 
 const createTaskSchema = z.object({
   name: z.string().min(1).max(80),
@@ -30,14 +16,25 @@ const createTaskSchema = z.object({
   category: z.enum(["learning", "responsibility", "family", "health", "creativity"]).optional().nullable(),
   coin_reward: z.coerce.number().int().min(0).max(500),
   star_reward: z.coerce.number().int().min(0).max(50),
-  difficulty: z.coerce.number().int().min(1).max(3).optional().nullable(),
+  difficulty: z.coerce.number().int().min(1).max(10).optional().nullable(),
   requires_approval: z.coerce.boolean().default(true),
   recurrence: z.enum(["none", "daily", "weekdays"]).default("none"),
   behavior_type: z.enum(["responsibility", "habit_building", "challenge", "character", "family"]).default("challenge"),
+  responsibility_policy: z.enum(["NONE", "REPAIR_REQUIRED", "COMPLETE_BEFORE_PRIVILEGE", "PARENT_DECIDES"]).default("NONE"),
   availability_type: z.enum(["assigned_only", "choice_pool", "both"]).default("assigned_only"),
   evidence_type: z.enum(["none", "photo", "audio", "text", "choice", "parent_observation"]).default("none"),
   evidence_required: z.coerce.boolean().default(false),
   max_audio_seconds: z.coerce.number().int().min(5).max(60).default(30),
+  // Curriculum fields (all optional — family-created tasks may not set them)
+  skill_domain: z.enum(["LEARNING", "SELF_MANAGEMENT", "LIFE_HOME", "MONEY", "COMMUNICATION", "CHARACTER_FAMILY", "HEALTH", "DIGITAL", "WORLD_INDEPENDENCE"]).optional().nullable(),
+  min_age: z.coerce.number().int().min(4).max(21).optional().nullable(),
+  recommended_age: z.coerce.number().int().min(4).max(21).optional().nullable(),
+  max_age: z.coerce.number().int().min(4).max(21).optional().nullable(),
+  independence_level: z.enum(["GUIDED", "SUPPORTED", "INDEPENDENT"]).optional().nullable(),
+  estimated_minutes: z.coerce.number().int().min(1).max(480).optional().nullable(),
+  development_goal: z.string().max(500).optional().nullable(),
+  parent_tip: z.string().max(500).optional().nullable(),
+  requires_supervision: z.coerce.boolean().default(false),
 });
 
 export async function createTask(formData: FormData) {
@@ -51,6 +48,7 @@ export async function createTask(formData: FormData) {
     requires_approval: formData.get("requires_approval") === "on" || formData.get("requires_approval") === "true",
     recurrence: (formData.get("recurrence") as string) || "none",
     behavior_type: (formData.get("behavior_type") as string) || "challenge",
+    responsibility_policy: (formData.get("responsibility_policy") as string) || "NONE",
     availability_type: (formData.get("availability_type") as string) || "assigned_only",
     evidence_type: (formData.get("evidence_type") as string) || "none",
     evidence_required: formData.get("evidence_required") === "on" || formData.get("evidence_required") === "true",
@@ -80,6 +78,7 @@ export async function createTask(formData: FormData) {
     in_pool,
     pool_max_per_day: in_pool ? pool_max_per_day : null,
     behavior_type: parsed.behavior_type,
+    responsibility_policy: parsed.responsibility_policy,
     availability_type: parsed.availability_type,
     evidence_type: parsed.evidence_type,
     evidence_required: parsed.evidence_required,
@@ -93,8 +92,12 @@ export async function createTask(formData: FormData) {
 export async function toggleTaskActive(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const active = formData.get("active") === "true";
-  const { supabase } = await requireFamily();
-  const { error } = await supabase.from("tasks").update({ active: !active }).eq("id", id);
+  const { supabase, familyId } = await requireFamily();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ active: !active })
+    .eq("id", id)
+    .eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/(parent)/tasks", "page");
 }
@@ -102,8 +105,12 @@ export async function toggleTaskActive(formData: FormData) {
 export async function toggleTaskPool(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const in_pool = formData.get("in_pool") === "true";
-  const { supabase } = await requireFamily();
-  const { error } = await supabase.from("tasks").update({ in_pool: !in_pool }).eq("id", id);
+  const { supabase, familyId } = await requireFamily();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ in_pool: !in_pool })
+    .eq("id", id)
+    .eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/(parent)/tasks", "page");
 }
@@ -131,6 +138,7 @@ const updateTaskSchema = z.object({
   evidence_required: z.coerce.boolean().default(false),
   max_audio_seconds: z.coerce.number().int().min(5).max(60).default(30),
   requires_approval: z.coerce.boolean().default(true),
+  responsibility_policy: z.enum(["NONE", "REPAIR_REQUIRED", "COMPLETE_BEFORE_PRIVILEGE", "PARENT_DECIDES"]).default("NONE"),
 });
 
 export async function updateTask(formData: FormData) {
@@ -144,6 +152,7 @@ export async function updateTask(formData: FormData) {
     evidence_required: formData.get("evidence_required") === "on" || formData.get("evidence_required") === "true",
     max_audio_seconds: formData.get("max_audio_seconds") || 30,
     requires_approval: formData.get("requires_approval") === "on" || formData.get("requires_approval") === "true",
+    responsibility_policy: (formData.get("responsibility_policy") as string) || "NONE",
   });
   const { supabase, familyId } = await requireFamily();
   const { error } = await supabase
@@ -157,6 +166,7 @@ export async function updateTask(formData: FormData) {
       evidence_required: parsed.evidence_required,
       max_audio_seconds: parsed.max_audio_seconds,
       requires_approval: parsed.requires_approval,
+      responsibility_policy: parsed.responsibility_policy,
     })
     .eq("id", parsed.id)
     .eq("family_id", familyId);
@@ -173,7 +183,7 @@ export async function cloneSystemTemplates() {
   // Clone system task templates
   const { data: tplTasks } = await admin
     .from("tasks")
-    .select("name, description, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, availability_type, evidence_type, evidence_required, max_audio_seconds")
+    .select("name, name_vi, description, description_vi, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, responsibility_policy, availability_type, evidence_type, evidence_required, max_audio_seconds, skill_domain, skill_subdomain, min_age, recommended_age, max_age, independence_level, estimated_minutes, recommended_frequency, requires_supervision, development_goal, development_goal_vi, parent_tip, parent_tip_vi, template_key, skill_ladder_key, skill_ladder_level")
     .eq("is_system_template", true);
   if (tplTasks?.length) {
     // Skip names that already exist as active tasks; allow re-cloning soft-deleted ones
@@ -186,6 +196,8 @@ export async function cloneSystemTemplates() {
         family_id: familyId,
         is_system_template: false,
         created_by: userId,
+        source_template_key: t.template_key,
+        template_key: undefined, // Don't copy the system template_key to family copies
       }));
     if (rows.length) await supabase.from("tasks").insert(rows);
   }
@@ -193,10 +205,11 @@ export async function cloneSystemTemplates() {
   // Clone system reward templates
   const { data: tplRewards } = await admin
     .from("rewards")
-    .select("name, description, category, coin_cost, requires_approval, dream_eligible, stock")
+    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
     .eq("is_system_template", true);
   if (tplRewards?.length) {
-    const { data: existingRewards } = await supabase.from("rewards").select("name").eq("family_id", familyId);
+    // Only skip templates whose name already exists as an ACTIVE reward (soft-deleted rows don't count)
+    const { data: existingRewards } = await supabase.from("rewards").select("name").eq("family_id", familyId).eq("active", true);
     const existingRewardNames = new Set((existingRewards ?? []).map((r) => r.name));
     const rows = tplRewards
       .filter((r) => !existingRewardNames.has(r.name))
@@ -215,8 +228,12 @@ export async function cloneSystemTemplates() {
 export async function updateBehaviorType(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const behavior_type = z.enum(["responsibility", "habit_building", "challenge", "character", "family"]).parse(formData.get("behavior_type"));
-  const { supabase } = await requireFamily();
-  const { error } = await supabase.from("tasks").update({ behavior_type }).eq("id", id);
+  const { supabase, familyId } = await requireFamily();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ behavior_type })
+    .eq("id", id)
+    .eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/(parent)/tasks", "page");
 }
@@ -225,15 +242,16 @@ export async function updateRewardStage(formData: FormData) {
   const child_id = z.string().uuid().parse(formData.get("child_id"));
   const task_id = z.string().uuid().parse(formData.get("task_id"));
   const reward_stage = z.enum(["full_reward", "reduced_reward", "stars_only", "graduated"]).parse(formData.get("reward_stage"));
-  const { supabase } = await requireFamily();
+  const { familyId } = await requireFamily();
 
-  // Verify family scope
+  // Both records must belong to the CALLER's family — checking only that the task
+  // and child match each other would still allow editing another family's data.
+  await Promise.all([
+    assertChildInFamily(child_id, familyId),
+    assertTaskInFamily(task_id, familyId),
+  ]);
+
   const admin = createAdminClient();
-  const { data: child } = await admin.from("children").select("family_id").eq("id", child_id).single();
-  if (!child) throw new Error("Child not found");
-  const { data: task } = await admin.from("tasks").select("family_id").eq("id", task_id).single();
-  if (!task || task.family_id !== child.family_id) throw new Error("Task not in family");
-
   const now = new Date().toISOString();
   const graduated_at = reward_stage === "graduated" ? now : null;
 
@@ -262,6 +280,43 @@ export async function deleteAllTasks() {
   revalidatePath("/[locale]/(parent)/tasks", "page");
 }
 
+export async function resetAndRecloneTasks() {
+  const { supabase, userId, familyId } = await requireFamily();
+  const admin = createAdminClient();
+
+  // Soft-delete all active family tasks
+  const { error: delErr } = await supabase
+    .from("tasks")
+    .update({ active: false })
+    .eq("family_id", familyId)
+    .eq("active", true)
+    .eq("is_system_template", false);
+  if (delErr) throw delErr;
+
+  // Fetch all system templates (including name_vi / description_vi + curriculum fields)
+  const { data: tplTasks, error: fetchErr } = await admin
+    .from("tasks")
+    .select("name, name_vi, description, description_vi, category, coin_reward, star_reward, difficulty, requires_approval, is_recurring, recurrence_rule, in_pool, pool_max_per_day, behavior_type, availability_type, evidence_type, evidence_required, max_audio_seconds, skill_domain, skill_subdomain, min_age, recommended_age, max_age, independence_level, estimated_minutes, recommended_frequency, requires_supervision, development_goal, development_goal_vi, parent_tip, parent_tip_vi, template_key, skill_ladder_key, skill_ladder_level")
+    .eq("is_system_template", true);
+  if (fetchErr) throw fetchErr;
+  if (!tplTasks?.length) return;
+
+  const rows = tplTasks.map((t) => ({
+    ...t,
+    family_id: familyId,
+    is_system_template: false,
+    active: true,
+    created_by: userId,
+    source_template_key: t.template_key,
+    template_key: undefined,
+  }));
+  const { error: insertErr } = await supabase.from("tasks").insert(rows);
+  if (insertErr) throw insertErr;
+
+  revalidatePath("/[locale]/(parent)/tasks", "page");
+  revalidatePath("/[locale]/(parent)/rewards", "page");
+}
+
 export async function assignTask(formData: FormData) {
   const schema = z.object({
     task_id: z.string().uuid(),
@@ -274,7 +329,14 @@ export async function assignTask(formData: FormData) {
     child_ids,
     due_date: (formData.get("due_date") as string) || todayISO(),
   });
-  const { supabase } = await requireFamily();
+  const { supabase, familyId } = await requireFamily();
+
+  // The task and every target child must belong to the caller's family.
+  await Promise.all([
+    assertTaskInFamily(parsed.task_id, familyId),
+    ...parsed.child_ids.map((cid) => assertChildInFamily(cid, familyId)),
+  ]);
+
   const rows = parsed.child_ids.map((cid) => ({
     task_id: parsed.task_id,
     child_id: cid,
@@ -283,6 +345,28 @@ export async function assignTask(formData: FormData) {
   }));
   const { error } = await supabase.from("task_assignments").insert(rows);
   if (error) throw error;
+
+  // For habit_building tasks, auto-create reward progress entries so the
+  // fading system is ready from day one.  Without this, habit coins pay
+  // indefinitely until the parent manually clicks "Start Habit Support".
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("behavior_type")
+    .eq("id", parsed.task_id)
+    .single();
+  if (task?.behavior_type === "habit_building") {
+    const admin = createAdminClient();
+    const progressRows = parsed.child_ids.map((cid) => ({
+      child_id: cid,
+      task_id: parsed.task_id,
+      reward_stage: "full_reward" as const,
+      completions: 0,
+    }));
+    await admin
+      .from("child_task_reward_progress")
+      .upsert(progressRows, { onConflict: "child_id,task_id" });
+  }
+
   revalidatePath("/[locale]/(parent)/tasks", "page");
   revalidatePath("/[locale]/(parent)/dashboard", "page");
 }

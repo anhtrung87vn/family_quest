@@ -1,7 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -9,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { createFamilyQuest, contributeToQuest, cancelQuest } from "./actions";
 import { CloneQuestsButton } from "./CloneQuestsButton";
+import { ResetQuestsButton } from "./ResetQuestsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -21,21 +20,16 @@ export default async function FamilyQuestsPage({
   setRequestLocale(locale);
   const t = await getTranslations();
 
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
-
-  const questsQ = supabase
-    .from("family_quests")
-    .select("*, members:family_quest_members(child_id, contributions, child:children(name))")
-    .in("status", ["active", "completed"])
-    .order("created_at", { ascending: false });
-  if (DEV_BYPASS) questsQ.eq("family_id", DEV_FAMILY_ID);
-
-  const childrenQ = supabase.from("children").select("id, name");
-  if (DEV_BYPASS) childrenQ.eq("family_id", DEV_FAMILY_ID);
+  const { familyId, supabase } = await resolveContext();
 
   const [{ data: quests }, { data: children }] = await Promise.all([
-    questsQ,
-    childrenQ.order("created_at"),
+    supabase
+      .from("family_quests")
+      .select("*, members:family_quest_members(child_id, contributions, child:children(name))")
+      .eq("family_id", familyId)
+      .in("status", ["active", "completed"])
+      .order("created_at", { ascending: false }),
+    supabase.from("children").select("id, name").eq("family_id", familyId).order("created_at"),
   ]);
 
   const activeQuests = (quests ?? []).filter((q) => q.status === "active");
@@ -98,6 +92,14 @@ export default async function FamilyQuestsPage({
           </form>
         </Collapsible>
       </Card>
+
+      {/* Reset & reclone quest templates */}
+      <ResetQuestsButton
+        label={t("parent.dangerResetRecloneQuests")}
+        desc={t("parent.dangerResetRecloneQuestsDesc")}
+        confirmLabel={t("parent.dangerResetRecloneConfirm")}
+        cancelLabel={t("parent.dangerCancel")}
+      />
 
       {/* Active quests */}
       {activeQuests.length > 0 && (

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
-import { deleteAllTasks } from "./actions";
+import { deleteAllTasks, resetAndRecloneTasks } from "./actions";
 
 interface DangerZoneProps {
   taskCount: number;
@@ -17,12 +17,17 @@ interface DangerZoneProps {
     restoreDesc: string;
     restoreDone: string;
     restoreError: string;
+    resetReclone: string;
+    resetRecloneDesc: string;
+    resetRecloneConfirm: string;
+    resetRecloneCancel: string;
   };
 }
 
 export function DangerZone({ taskCount, labels }: DangerZoneProps) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [restoreMsg, setRestoreMsg] = useState<{ ok: boolean; msg: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -31,6 +36,14 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
     startTransition(async () => {
       await deleteAllTasks();
       setConfirmDelete(false);
+      setOpen(false);
+    });
+  }
+
+  function handleResetReclone() {
+    startTransition(async () => {
+      await resetAndRecloneTasks();
+      setConfirmReset(false);
       setOpen(false);
     });
   }
@@ -103,6 +116,42 @@ export function DangerZone({ taskCount, labels }: DangerZoneProps) {
                 ⬆️ Upload
               </Button>
             </div>
+          </div>
+
+          {/* Reset & reclone */}
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
+            <div className="mb-2">
+              <div className="text-xs font-semibold text-orange-700">🔄 {labels.resetReclone}</div>
+              <div className="mt-0.5 text-[11px] text-stone-500">{labels.resetRecloneDesc}</div>
+            </div>
+            {!confirmReset ? (
+              <Button
+                size="sm"
+                className="bg-orange-100 text-xs text-orange-600 hover:bg-orange-200"
+                onClick={() => setConfirmReset(true)}
+              >
+                🔄 {labels.resetReclone}
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="bg-orange-500 text-xs text-white hover:bg-orange-600"
+                  onClick={handleResetReclone}
+                  disabled={isPending}
+                >
+                  {isPending ? "..." : labels.resetRecloneConfirm}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs"
+                  onClick={() => setConfirmReset(false)}
+                >
+                  {labels.resetRecloneCancel}
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Delete all */}

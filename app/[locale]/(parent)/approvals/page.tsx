@@ -1,7 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -17,6 +15,11 @@ import { EvidenceReview, type EvidenceItem } from "@/components/ui/EvidenceRevie
 import { ParentNoteForm } from "@/components/ui/ParentNoteForm";
 import { ApproveForm } from "@/components/ui/ApproveForm";
 import { getParentMessageSignedUrl } from "./actions";
+import { MissedResponsibilityForm } from "@/components/ui/MissedResponsibilityForm";
+import { handleMissedResponsibility, startHabitSupport } from "../tasks/responsibility-actions";
+import { todayISO } from "@/lib/recurrence";
+import { getResponsibilitySummary } from "@/lib/responsibility";
+import { HabitSuggestionCard } from "@/components/ui/HabitSuggestionCard";
 
 export default async function ApprovalsPage({
   params,
@@ -25,50 +28,95 @@ export default async function ApprovalsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
 
-  const { data: pendingTasks } = await supabase
-    .from("task_completions")
-    .select("id, submitted_at, assignment:task_assignments(id, child:children(id,name,avatar_url), task:tasks(id,name,coin_reward,star_reward,category))")
-    .eq("status", "submitted")
-    .order("submitted_at", { ascending: true });
+  const today = todayISO();
 
-  const { data: pendingRedemptions } = await supabase
-    .from("reward_redemptions")
-    .select("id, coin_cost, requested_at, child:children(id,name,avatar_url), reward:rewards(id,name)")
-    .eq("status", "requested")
-    .order("requested_at", { ascending: true });
+  // Parallel: fetch all independent data at once.
+  // resolveContext now returns the user-scoped client, so RLS scopes every
+  // query automatically. The !inner joins + explicit family_id filters are
+  // kept as belt-and-suspenders defence.
+  type MissedTask = { id: string; status: string; due_date: string; child: { id: string; name: string; avatar_url: string | null } | null; task: { id: string; name: string; name_vi: string | null; behavior_type: string | null; responsibility_policy: string | null; category: string | null } | null };
+  const [pendingTasksResult, pendingRedemptionsResult, childrenResult, missedResult] = await Promise.all([
+    supabase
+      .from("task_completions")
+      .select("id, submitted_at, assignment:task_assignments!inner(id, child:children!inner(id,name,avatar_url), task:tasks(id,name,coin_reward,star_reward,category))")
+      .eq("status", "submitted")
+      .eq("assignment.child.family_id", familyId)
+      .order("submitted_at", { ascending: true }),
+    supabase
+      .from("reward_redemptions")
+      .select("id, coin_cost, requested_at, child:children!inner(id,name,avatar_url), reward:rewards(id,name)")
+      .eq("status", "requested")
+      .eq("child.family_id", familyId)
+      .order("requested_at", { ascending: true }),
+    supabase.from("children").select("id, name, avatar_url").eq("family_id", familyId).order("created_at"),
+    supabase
+      .from("task_assignments")
+      .select("id, status, due_date, child:children!inner(id, name, avatar_url), task:tasks(id, name, name_vi, behavior_type, responsibility_policy, category)")
+      .in("status", ["todo", "expired"])
+      .eq("child.family_id", familyId)
+      .lte("due_date", today)
+      .order("due_date", { ascending: true }),
+  ]);
+  const pendingTasks = pendingTasksResult.data;
+  const pendingRedemptions = pendingRedemptionsResult.data;
+  const children = childrenResult.data;
 
-  const childrenQ = supabase.from("children").select("id, name, avatar_url");
-  if (DEV_BYPASS) childrenQ.eq("family_id", DEV_FAMILY_ID);
-  const { data: children } = await childrenQ.order("created_at");
+  // Filter missed responsibilities to responsibility/habit_building tasks scoped to family
+  const childIds = new Set((children ?? []).map((c) => c.id));
+  const missedResponsibilities: MissedTask[] = ((missedResult.data ?? []) as unknown as MissedTask[]).filter((a: MissedTask) => {
+    const task = Array.isArray(a.task) ? a.task[0] : a.task;
+    const bt = (task as any)?.behavior_type;
+    if (bt !== "responsibility" && bt !== "habit_building") return false;
+    const child = Array.isArray(a.child) ? a.child[0] : a.child;
+    return child && childIds.has(child.id);
+  });
+
+  // Habit support suggestions — detect repeated forgetting patterns
+  type HabitSuggestion = { taskId: string; taskName: string; taskNameVi: string | null; childId: string; childName: string; forgottenCount: number };
+  let habitSuggestions: HabitSuggestion[] = [];
+  try {
+    const allSummaries = await Promise.all(
+      (children ?? []).map((c) => getResponsibilitySummary(familyId, c.id)),
+    );
+    habitSuggestions = allSummaries
+      .flat()
+      .filter((s) => s.suggestHabitSupport)
+      .map((s) => ({
+        taskId: s.taskId,
+        taskName: s.taskName,
+        taskNameVi: s.taskNameVi,
+        childId: s.childId,
+        childName: s.childName,
+        forgottenCount: s.forgottenCount,
+      }));
+  } catch (e) {
+    console.error("[approvals] habit suggestions error:", e);
+  }
 
   // Recent messages with reactions
-  const admin = createAdminClient();
-  const familyId = DEV_BYPASS ? DEV_FAMILY_ID : null;
   let recentMessages: Array<{ id: string; message: string; message_type: string; created_at: string; reaction: string | null; child_id: string; reference_id: string | null; media_type: string | null; media_path: string | null; media_mime: string | null; media_signed_url?: string | null }> = [];
-  if (familyId || !DEV_BYPASS) {
-    const msgQuery = admin
+  {
+    const msgQuery = supabase
       .from("parent_messages")
       .select("id, message, message_type, created_at, reaction, child_id, reference_id, media_type, media_path, media_mime")
+      .eq("family_id", familyId)
       .order("created_at", { ascending: false })
       .limit(10);
-    if (familyId) msgQuery.eq("family_id", familyId);
     const { data: msgs, error: msgsErr } = await msgQuery;
     if (msgsErr) console.error("[approvals] parent_messages fetch error:", msgsErr);
-    else console.log("[approvals] parent_messages fetched:", msgs?.length ?? 0, "rows");
-    // Resolve signed URLs — rebuild objects instead of mutating frozen rows
+    // Resolve signed URLs in parallel — rebuild objects instead of mutating frozen rows
     type RawMsg = Omit<typeof recentMessages[0], "media_signed_url">;
     const msgsRaw = (msgs ?? []) as RawMsg[];
-    recentMessages = await Promise.all(
-      msgsRaw.map(async (m) => {
-        if (m.media_path && (m.media_type === "photo" || m.media_type === "audio")) {
-          return { ...m, media_signed_url: await getParentMessageSignedUrl(m.media_path) };
-        }
-        return { ...m, media_signed_url: null };
-      })
-    );
+    const mediaMsgs = msgsRaw.filter((m) => m.media_path && (m.media_type === "photo" || m.media_type === "audio"));
+    const signedUrls = await Promise.all(mediaMsgs.map((m) => getParentMessageSignedUrl(m.media_path!)));
+    const signedUrlMap = new Map(mediaMsgs.map((m, i) => [m.id, signedUrls[i]]));
+    recentMessages = msgsRaw.map((m) => ({
+      ...m,
+      media_signed_url: signedUrlMap.get(m.id) ?? null,
+    }));
   }
 
   // Fetch task names for QUEST_APPROVAL messages
@@ -77,7 +125,7 @@ export default async function ApprovalsPage({
     .map((m) => m.reference_id!);
   const taskNameMap = new Map<string, string>();
   if (taskCompletionIds.length > 0) {
-    const { data: completions } = await admin
+    const { data: completions } = await supabase
       .from("task_completions")
       .select("id, assignment:task_assignments(task:tasks(name))")
       .in("id", taskCompletionIds);
@@ -93,23 +141,24 @@ export default async function ApprovalsPage({
   const completionIds = (pendingTasks ?? []).map((c) => c.id);
   const evidenceMap = new Map<string, EvidenceItem[]>();
   if (completionIds.length > 0) {
-    const admin2 = createAdminClient();
-    const { data: evidenceRows } = await admin2
+    const { data: evidenceRows } = await supabase
       .from("task_evidence")
       .select("id, task_completion_id, evidence_type, storage_path, text_content, choice_value, audio_duration, mime_type, status, expires_at")
       .in("task_completion_id", completionIds)
+      .eq("family_id", familyId)
       .in("status", ["active", "promoted"]);
-    for (const ev of evidenceRows ?? []) {
+    // Resolve all signed URLs in parallel
+    const rows = evidenceRows ?? [];
+    const needsUrl = rows.filter((ev) => ev.storage_path && (ev.evidence_type === "photo" || ev.evidence_type === "audio") && ev.status === "active");
+    const urls = await Promise.all(needsUrl.map((ev) => getEvidenceSignedUrl(ev.storage_path!)));
+    const urlMap = new Map(needsUrl.map((ev, i) => [ev.id, urls[i]]));
+    for (const ev of rows) {
       const arr = evidenceMap.get(ev.task_completion_id) ?? [];
-      let signed_url: string | null = null;
-      if (ev.storage_path && (ev.evidence_type === "photo" || ev.evidence_type === "audio") && ev.status === "active") {
-        signed_url = await getEvidenceSignedUrl(ev.storage_path);
-      }
       arr.push({
         id: ev.id,
         evidence_type: ev.evidence_type,
         storage_path: ev.storage_path,
-        signed_url,
+        signed_url: urlMap.get(ev.id) ?? null,
         text_content: ev.text_content,
         choice_value: ev.choice_value,
         audio_duration: ev.audio_duration,
@@ -147,7 +196,19 @@ export default async function ApprovalsPage({
     proud: locale === "vi" ? "Con tự hào về việc này!" : "I'm proud of this!",
   };
 
-  const totalPending = (pendingTasks?.length ?? 0) + (pendingRedemptions?.length ?? 0);
+  const totalPending = (pendingTasks?.length ?? 0) + (pendingRedemptions?.length ?? 0) + missedResponsibilities.length;
+
+  const missedLabels = {
+    whatHappened: t("parent.whatHappened"),
+    forgot: t("parent.reasonForgot"),
+    neededHelp: t("parent.reasonNeededHelp"),
+    excused: t("parent.reasonExcused"),
+    refused: t("parent.reasonRefused"),
+    skip: t("parent.reasonSkip"),
+    parentNote: t("parent.parentNote"),
+    submit: t("parent.handleSubmit"),
+    handled: t("parent.responsibilityHandled"),
+  };
 
   return (
     <div className="space-y-6">
@@ -170,6 +231,75 @@ export default async function ApprovalsPage({
             description={t("approvals.allClearDesc")}
           />
         </Card>
+      )}
+
+      {/* � Habit support suggestions */}
+      {habitSuggestions.length > 0 && (
+        <section>
+          <div className="space-y-2">
+            {habitSuggestions.map((s) => {
+              const taskName = (locale === "vi" && s.taskNameVi) ? s.taskNameVi : s.taskName;
+              return (
+                <HabitSuggestionCard
+                  key={`${s.taskId}-${s.childId}`}
+                  taskId={s.taskId}
+                  childId={s.childId}
+                  message={t("parent.habitSuggestion", { child: s.childName, task: taskName })}
+                  action={startHabitSupport}
+                  labels={{
+                    startHabitBuilding: t("parent.startHabitBuilding"),
+                    dismissSuggestion: t("parent.dismissSuggestion"),
+                  }}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* �🌱 Missed responsibilities */}
+      {missedResponsibilities.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-emerald-700">
+            🌱 {t("parent.missedResponsibilities")}
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              {missedResponsibilities.length}
+            </span>
+          </h2>
+          <div className="space-y-3">
+            {missedResponsibilities.map((a) => {
+              const child = Array.isArray(a.child) ? a.child[0] : a.child;
+              const task = Array.isArray(a.task) ? a.task[0] : a.task;
+              const taskName = (locale === "vi" && (task as any)?.name_vi) ? (task as any).name_vi : task?.name;
+              return (
+                <Card key={a.id} className="border-emerald-100 !p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    {(child as any)?.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={(child as any).avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-2 ring-emerald-200" />
+                    ) : (
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-700 ring-2 ring-emerald-200">
+                        {child?.name?.slice(0, 1)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-xs text-stone-800">{child?.name}</span>
+                      <span className="text-stone-300 text-[10px] mx-1">·</span>
+                      <span className="text-[11px] text-stone-600 truncate">{taskName}</span>
+                    </div>
+                  </div>
+                  <MissedResponsibilityForm
+                    taskId={task?.id ?? ""}
+                    childId={child?.id ?? ""}
+                    assignmentId={a.id}
+                    action={handleMissedResponsibility}
+                    labels={missedLabels}
+                  />
+                </Card>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* ✅ Task approvals */}

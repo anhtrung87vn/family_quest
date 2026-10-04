@@ -1,15 +1,22 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
 import { getLevelInfo } from "@/lib/levels";
 import { levelIcon } from "@/lib/category-style";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Collapsible } from "@/components/ui/Collapsible";
-import { createChild, uploadAvatar, setPin, revokeAssignment } from "./actions";
+import { createChild, uploadAvatar, setPin, revokeAssignment, updateChildBirthday } from "./actions";
+
+function computeAge(dob: string): number {
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 export default async function KidsPage({
   params,
@@ -19,10 +26,9 @@ export default async function KidsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
 
-  const q = supabase.from("children").select("id, name, grade, avatar_url, preferred_language, lifetime_stars, current_dream_reward_id");
-  if (DEV_BYPASS) q.eq("family_id", DEV_FAMILY_ID);
+  const q = supabase.from("children").select("id, name, grade, avatar_url, preferred_language, lifetime_stars, current_dream_reward_id, date_of_birth").eq("family_id", familyId);
   const { data: children } = await q.order("created_at", { ascending: true });
 
   // Fetch balances, streaks, dream rewards, assigned tasks per child
@@ -76,6 +82,10 @@ export default async function KidsPage({
               <input name="grade" type="number" min="1" max="12" className="h-11 rounded-xl border border-stone-300 px-3 text-sm" />
             </label>
             <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-stone-500">{t("kids.birthday")}</span>
+              <input name="date_of_birth" type="date" className="h-11 rounded-xl border border-stone-300 px-3 text-sm" />
+            </label>
+            <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-stone-500">{t("kids.language")}</span>
               <select name="preferred_language" defaultValue="en" className="h-11 rounded-xl border border-stone-300 px-3 text-sm">
                 <option value="en">English</option>
@@ -111,6 +121,7 @@ export default async function KidsPage({
           const level = getLevelInfo(c.lifetime_stars ?? 0);
           const levelTitle = locale === "vi" ? level.title_vi : level.title_en;
           const lvIcon = levelIcon(level.level);
+          const childAge = c.date_of_birth ? computeAge(c.date_of_birth) : null;
           return (
             <Card key={c.id} className="space-y-4">
               {/* Header */}
@@ -124,7 +135,14 @@ export default async function KidsPage({
                   </div>
                 )}
                 <div className="flex-1">
-                  <div className="text-lg font-bold text-stone-800">{c.name}</div>
+                  <div className="text-lg font-bold text-stone-800">
+                    {c.name}
+                    {childAge != null && (
+                      <span className="ml-1.5 text-sm font-normal text-stone-400">
+                        · {t("kids.age", { age: childAge })}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-stone-500">
                     {c.grade != null ? `Grade ${c.grade} · ` : ""}
                     {c.preferred_language === "vi" ? "Tiếng Việt" : "English"}
@@ -248,6 +266,21 @@ export default async function KidsPage({
                     <input name="pin" inputMode="numeric" pattern="\d{6}" maxLength={6} minLength={6} required
                       placeholder="••••••" className="h-9 w-28 rounded-xl border border-stone-300 px-3 text-sm" />
                     <Button type="submit" size="sm" variant="secondary">{t("kids.setPin")}</Button>
+                  </form>
+                </Collapsible>
+
+                <Collapsible
+                  trigger={
+                    <span className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200">
+                      🎂 {t("kids.birthday")}
+                    </span>
+                  }
+                >
+                  <form action={updateChildBirthday} className="flex items-center gap-2">
+                    <input type="hidden" name="child_id" value={c.id} />
+                    <input name="date_of_birth" type="date" defaultValue={c.date_of_birth ?? ""}
+                      className="h-9 rounded-xl border border-stone-300 px-3 text-sm" />
+                    <Button type="submit" size="sm" variant="secondary">{t("common.save")}</Button>
                   </form>
                 </Collapsible>
               </div>

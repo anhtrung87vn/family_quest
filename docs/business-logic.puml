@@ -1,0 +1,128 @@
+@startuml BloomQuest_Business_Logic
+!theme plain
+title BloomQuest Family - Business Logic Overview
+
+' ──────────────────────────────────────────
+' ACTORS
+' ──────────────────────────────────────────
+actor "Parent" as parent #FFD700
+actor "Child" as child #87CEEB
+actor "System (Cron)" as cron #D3D3D3
+
+' ──────────────────────────────────────────
+' MAIN SYSTEMS
+' ──────────────────────────────────────────
+package "Authentication" as auth_pkg {
+  [Parent Auth\n(Supabase: Google/Email)] as parent_auth
+  [Child Auth\n(PIN + HMAC Cookie)] as child_auth
+}
+
+package "Task Management" as task_pkg {
+  [Task CRUD] as task_crud
+  [Task Assignment] as task_assign
+  [Task Completion] as task_complete
+  [Task Approval] as task_approve
+  [Evidence Collection] as evidence
+  [Recurring Generation] as recurring
+}
+
+package "Quest Pool" as pool_pkg {
+  [Quest Library\n(System Templates)] as quest_lib
+  [Choice Pool] as choice_pool
+  [Pool Claims] as pool_claims
+}
+
+package "Reward System" as reward_pkg {
+  [Reward CRUD] as reward_crud
+  [Reward Redemption] as reward_redeem
+  [Reward Approval] as reward_approve
+}
+
+package "Economy (Ledger)" as economy_pkg {
+  [Coin Transactions\n(append-only)] as coin_ledger
+  [Star Transactions\n(append-only)] as star_ledger
+  [Balance View\n(computed)] as balance
+  [Habit Fading\n(reward stages)] as habit_fading
+}
+
+package "Gamification" as game_pkg {
+  [Level System\n(Stars-based)] as levels
+  [Streak Tracking\n(grace-day)] as streaks
+  [Badge Awards\n(auto)] as badges
+}
+
+package "Family Features" as family_pkg {
+  [Family Quests] as family_quests
+  [Parent Messages] as parent_msg
+  [Weekly Reflections] as reflections
+  [Family Memories] as memories
+}
+
+package "Content Lifecycle" as content_pkg {
+  [Evidence Expiration\n(Cron 03:00 UTC)] as evidence_cleanup
+  [Assignment Generation\n(Cron 22:00 UTC)] as assign_gen
+  [Memory Promotion] as memory_promo
+}
+
+' ──────────────────────────────────────────
+' PARENT FLOWS
+' ──────────────────────────────────────────
+parent --> parent_auth : Login (Google/Email)
+parent --> task_crud : Create/Edit/Deactivate tasks
+parent --> task_assign : Assign tasks to children
+parent --> task_approve : Approve/Reject completions
+parent --> reward_crud : Create/Edit rewards
+parent --> reward_approve : Approve/Reject redemptions
+parent --> quest_lib : Browse & clone templates
+parent --> family_quests : Create family quests
+parent --> parent_msg : Send messages to child
+parent --> reflections : Write weekly reflections
+parent --> memories : Promote evidence to memory
+
+' ──────────────────────────────────────────
+' CHILD FLOWS
+' ──────────────────────────────────────────
+child --> child_auth : Select profile + PIN
+child --> task_complete : Submit "I'm Done!"
+child --> evidence : Upload photo/audio/text
+child --> choice_pool : Pick quest from pool
+child --> reward_redeem : Request redemption
+child --> balance : View coins/stars
+child --> levels : View level progress
+child --> streaks : View streak
+child --> badges : View earned badges
+
+' ──────────────────────────────────────────
+' SYSTEM FLOWS
+' ──────────────────────────────────────────
+cron --> assign_gen : Generate daily assignments
+cron --> evidence_cleanup : Expire old evidence
+
+' ──────────────────────────────────────────
+' INTERNAL CONNECTIONS
+' ──────────────────────────────────────────
+task_approve --> coin_ledger : Award coins\n(via SECURITY DEFINER)
+task_approve --> star_ledger : Award stars
+task_approve --> habit_fading : Check behavior_type\n+ reward_stage
+task_approve --> streaks : Update streak
+task_approve --> badges : Check badge conditions
+
+reward_redeem --> coin_ledger : Deduct coins\n(hold on request)
+reward_approve --> coin_ledger : Confirm deduction\nor refund
+
+habit_fading --> coin_ledger : Apply stage multiplier\n(100% / 50% / 0%)
+habit_fading --> star_ledger : Stars always 100%\nuntil graduated
+
+coin_ledger --> balance : SUM(amount)
+star_ledger --> balance : SUM(amount)
+star_ledger --> levels : lifetime_stars -> level
+
+recurring --> task_assign : Auto-create assignments
+
+evidence --> evidence_cleanup : Expires after TTL
+evidence --> memory_promo : Promote to permanent
+
+quest_lib --> choice_pool : Templates -> Pool tasks
+choice_pool --> pool_claims : Track daily/weekly claims
+
+@enduml

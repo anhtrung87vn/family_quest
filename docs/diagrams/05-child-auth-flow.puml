@@ -1,0 +1,36 @@
+@startuml Child_Auth_Flow
+!theme plain
+title Use Case Flow: Child Authentication
+
+|Child|
+start
+:Visit /child/select;
+:See child profiles\n(July, Berry);
+:Tap on profile;
+:Redirect to /child/pin;
+:Enter 6-digit PIN;
+
+|System|
+:Hash input with argon2id;
+:Compare with stored pin_hash;
+
+if (PIN correct?) then (yes)
+  :Mint HMAC-signed HttpOnly\ncookie (bq_child);
+  :Cookie TTL = 12 hours;
+  :Redirect to /child/(app)/home;
+
+  |Child|
+  :See Home screen;
+  :Greeting + balance +\ntoday's tasks;
+
+else (no)
+  |System|
+  :Return error;
+
+  |Child|
+  :See "Wrong PIN" message;
+  :Retry;
+endif
+
+stop
+@enduml

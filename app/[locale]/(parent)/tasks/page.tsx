@@ -1,7 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -18,12 +16,11 @@ export default async function TasksPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
   const t = await getTranslations();
 
-  const tasksQ = supabase.from("tasks").select("*").eq("is_system_template", false).eq("active", true);
-  const childrenQ = supabase.from("children").select("id, name");
-  if (DEV_BYPASS) { tasksQ.eq("family_id", DEV_FAMILY_ID); childrenQ.eq("family_id", DEV_FAMILY_ID); }
+  const tasksQ = supabase.from("tasks").select("id, name, description, category, coin_reward, star_reward, active, recurrence_rule, in_pool, behavior_type, availability_type, min_age, recommended_age, max_age").eq("is_system_template", false).eq("active", true).eq("family_id", familyId);
+  const childrenQ = supabase.from("children").select("id, name").eq("family_id", familyId);
   const [{ data: tasks }, { data: children }] = await Promise.all([
     tasksQ.order("created_at", { ascending: false }),
     childrenQ.order("created_at"),
@@ -37,16 +34,20 @@ export default async function TasksPage({
         <DangerZone
           taskCount={tasks?.length ?? 0}
           labels={{
-            deleteAll: "Xoá tất cả task",
-            deleteAllConfirm: "Xác nhận xoá hết",
-            deleteAllCancel: "Huỷ",
-            deleteAllDone: "Đã xoá",
-            backup: "Sao lưu dữ liệu",
-            backupDesc: "Download toàn bộ tasks, rewards, children, lịch sử xuống máy.",
-            restore: "Khôi phục dữ liệu",
-            restoreDesc: "Upload file backup JSON để khôi phục tasks và rewards.",
-            restoreDone: "Khôi phục thành công",
-            restoreError: "File không hợp lệ hoặc lỗi server",
+            deleteAll: t("parent.dangerDeleteAll"),
+            deleteAllConfirm: t("parent.dangerDeleteAllConfirm"),
+            deleteAllCancel: t("parent.dangerCancel"),
+            deleteAllDone: t("parent.dangerDeleteAllDone"),
+            backup: t("parent.dangerBackup"),
+            backupDesc: t("parent.dangerBackupDesc"),
+            restore: t("parent.dangerRestore"),
+            restoreDesc: t("parent.dangerRestoreDesc"),
+            restoreDone: t("parent.dangerRestoreDone"),
+            restoreError: t("parent.dangerRestoreError"),
+            resetReclone: t("parent.dangerResetReclone"),
+            resetRecloneDesc: t("parent.dangerResetRecloneDesc"),
+            resetRecloneConfirm: t("parent.dangerResetRecloneConfirm"),
+            resetRecloneCancel: t("parent.dangerCancel"),
           }}
         />
       </div>
@@ -129,6 +130,12 @@ export default async function TasksPage({
                   <option value="both">📋✨ {t("tasks.availability.both")}</option>
                 </select>
               </div>
+              <select name="responsibility_policy" className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm">
+                <option value="NONE">{t("parent.policyNone")}</option>
+                <option value="REPAIR_REQUIRED">{t("parent.policyRepairRequired")}</option>
+                <option value="COMPLETE_BEFORE_PRIVILEGE">{t("parent.policyCompleteBeforePrivilege")}</option>
+                <option value="PARENT_DECIDES">{t("parent.policyParentDecides")}</option>
+              </select>
               <select name="recurrence" className="h-11 w-full rounded-xl border border-stone-300 px-3 text-sm">
                 <option value="none">{t("tasks.rec.none")}</option>
                 <option value="daily">{t("tasks.rec.daily")}</option>
@@ -197,6 +204,9 @@ export default async function TasksPage({
             in_pool: !!(task as Record<string, unknown>).in_pool,
             behavior_type: ((task as Record<string, unknown>).behavior_type as string) ?? "challenge",
             availability_type: ((task as Record<string, unknown>).availability_type as string) ?? "assigned_only",
+            min_age: ((task as Record<string, unknown>).min_age as number | null) ?? null,
+            recommended_age: ((task as Record<string, unknown>).recommended_age as number | null) ?? null,
+            max_age: ((task as Record<string, unknown>).max_age as number | null) ?? null,
           }))}
           children={(children ?? []).map((c) => ({ id: c.id, name: c.name }))}
           labels={{

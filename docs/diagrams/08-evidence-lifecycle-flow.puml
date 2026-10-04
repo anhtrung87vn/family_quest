@@ -1,0 +1,47 @@
+@startuml Evidence_Lifecycle_Flow
+!theme plain
+title Use Case Flow: Evidence & Memory Lifecycle
+
+|Child|
+start
+:Submit task with\nevidence required;
+
+if (Evidence type?) then (photo)
+  :Take/upload photo\n(max 10MB);
+elseif (audio) then
+  :Record audio\n(5-60 seconds);
+elseif (text) then
+  :Write text response;
+else (choice)
+  :Select from options;
+endif
+
+|System|
+:Upload to Supabase Storage\n(family-evidence bucket);
+:Path: {family_id}/{child_id}/...;
+:Create task_evidence record\n(status = active);
+:Set expires_at based on TTL;
+
+|Parent|
+:Review evidence in\nApprovals;
+
+if (Worth preserving?) then (yes)
+  :Promote to Family Memory;
+
+  |System|
+  :Copy media to\nfamily-memories bucket;
+  :Create family_memories record\n(permanent, no expiration);
+  :Update task_evidence\n(status = promoted,\nmemory_id = new ID);
+
+else (no)
+  :Let evidence expire\nnaturally;
+
+  |System|
+  :Cron runs daily at 03:00 UTC;
+  :Find active evidence\npast expires_at;
+  :Mark status = expired;
+  :Delete media from storage;
+endif
+
+stop
+@enduml

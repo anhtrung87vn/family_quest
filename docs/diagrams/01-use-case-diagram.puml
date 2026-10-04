@@ -1,0 +1,144 @@
+@startuml BloomQuest_Use_Cases
+!theme plain
+title BloomQuest Family - Use Case Diagram
+
+left to right direction
+
+actor "Parent" as P #FFD700
+actor "Child" as C #87CEEB
+actor "System" as S #D3D3D3
+
+rectangle "BloomQuest Family" {
+
+  package "Authentication" {
+    usecase "Login with Google/Email" as UC_P_LOGIN
+    usecase "Select Child Profile" as UC_C_SELECT
+    usecase "Enter PIN" as UC_C_PIN
+    usecase "Sign Out" as UC_SIGNOUT
+  }
+
+  package "Child Management" {
+    usecase "Create Child Profile" as UC_CREATE_CHILD
+    usecase "Upload/Change Avatar" as UC_AVATAR
+    usecase "Set/Reset PIN" as UC_PIN
+  }
+
+  package "Task Management" {
+    usecase "Create Task" as UC_CREATE_TASK
+    usecase "Edit/Deactivate Task" as UC_EDIT_TASK
+    usecase "Assign Task to Child" as UC_ASSIGN
+    usecase "Configure Recurrence" as UC_RECURRENCE
+    usecase "Set Behavior Type" as UC_BEHAVIOR
+    usecase "Set Evidence Type" as UC_EVIDENCE_TYPE
+    usecase "Browse Quest Library" as UC_LIBRARY
+    usecase "Clone Template" as UC_CLONE
+  }
+
+  package "Task Execution (Child)" {
+    usecase "View Today's Tasks" as UC_VIEW_TASKS
+    usecase "Submit Task (I'm Done!)" as UC_SUBMIT
+    usecase "Upload Evidence" as UC_UPLOAD_EV
+    usecase "Pick Quest from Pool" as UC_PICK_QUEST
+  }
+
+  package "Approval Workflow" {
+    usecase "View Pending Approvals" as UC_PENDING
+    usecase "Approve Task" as UC_APPROVE_TASK
+    usecase "Reject Task" as UC_REJECT_TASK
+    usecase "Send Celebration Message" as UC_CELEBRATE
+  }
+
+  package "Reward System" {
+    usecase "Create Reward" as UC_CREATE_REWARD
+    usecase "Edit Reward" as UC_EDIT_REWARD
+    usecase "Browse Reward Shop" as UC_BROWSE_REWARDS
+    usecase "Request Redemption" as UC_REDEEM
+    usecase "Approve Redemption" as UC_APPROVE_REWARD
+    usecase "Reject Redemption" as UC_REJECT_REWARD
+  }
+
+  package "Economy & Progress" {
+    usecase "View Coin/Star Balance" as UC_BALANCE
+    usecase "View Transaction History" as UC_HISTORY
+    usecase "Manual Coin Adjustment" as UC_ADJUST
+    usecase "View Level & Badges" as UC_LEVEL
+    usecase "View Streaks" as UC_STREAKS
+  }
+
+  package "Family Features" {
+    usecase "Create Family Quest" as UC_FAMILY_QUEST
+    usecase "Send Message to Child" as UC_MSG
+    usecase "Write Weekly Reflection" as UC_REFLECT
+    usecase "Promote Evidence to Memory" as UC_PROMOTE
+    usecase "View Statistics" as UC_STATS
+  }
+
+  package "Settings & i18n" {
+    usecase "Switch Language (EN/VI)" as UC_LANG
+    usecase "Manage Preferences" as UC_PREFS
+  }
+
+  package "System Automation" {
+    usecase "Generate Daily Assignments" as UC_CRON_ASSIGN
+    usecase "Cleanup Expired Evidence" as UC_CRON_CLEAN
+    usecase "Auto-Award Badges" as UC_AUTO_BADGE
+  }
+}
+
+' Parent connections
+P --> UC_P_LOGIN
+P --> UC_SIGNOUT
+P --> UC_CREATE_CHILD
+P --> UC_AVATAR
+P --> UC_PIN
+P --> UC_CREATE_TASK
+P --> UC_EDIT_TASK
+P --> UC_ASSIGN
+P --> UC_RECURRENCE
+P --> UC_BEHAVIOR
+P --> UC_EVIDENCE_TYPE
+P --> UC_LIBRARY
+P --> UC_CLONE
+P --> UC_PENDING
+P --> UC_APPROVE_TASK
+P --> UC_REJECT_TASK
+P --> UC_CELEBRATE
+P --> UC_CREATE_REWARD
+P --> UC_EDIT_REWARD
+P --> UC_APPROVE_REWARD
+P --> UC_REJECT_REWARD
+P --> UC_ADJUST
+P --> UC_FAMILY_QUEST
+P --> UC_MSG
+P --> UC_REFLECT
+P --> UC_PROMOTE
+P --> UC_STATS
+P --> UC_LANG
+P --> UC_PREFS
+
+' Child connections
+C --> UC_C_SELECT
+C --> UC_C_PIN
+C --> UC_SIGNOUT
+C --> UC_VIEW_TASKS
+C --> UC_SUBMIT
+C --> UC_UPLOAD_EV
+C --> UC_PICK_QUEST
+C --> UC_BROWSE_REWARDS
+C --> UC_REDEEM
+C --> UC_BALANCE
+C --> UC_HISTORY
+C --> UC_LEVEL
+C --> UC_STREAKS
+
+' System connections
+S --> UC_CRON_ASSIGN
+S --> UC_CRON_CLEAN
+S --> UC_AUTO_BADGE
+
+' Relationships
+UC_SUBMIT ..> UC_UPLOAD_EV : <<include>>\n(if evidence required)
+UC_APPROVE_TASK ..> UC_AUTO_BADGE : <<include>>
+UC_CLONE ..> UC_LIBRARY : <<extend>>
+
+@enduml

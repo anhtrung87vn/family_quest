@@ -171,8 +171,6 @@ export async function requestRewardAction(
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
 
-    console.log("[requestRewardAction] start reward_id=", reward_id, "child=", session.childId);
-
     // Fetch reward details
     const { data: reward, error: rewardErr } = await admin
       .from("rewards")
@@ -189,7 +187,6 @@ export async function requestRewardAction(
 
     // Check balance
     const { coin } = await (await import("@/lib/ledger")).getChildBalance(session.childId);
-    console.log("[requestRewardAction] balance check: coin=", coin, "cost=", reward.coin_cost);
     if (coin < reward.coin_cost) return { ok: false, error: `Not enough coins (have ${coin}, need ${reward.coin_cost})` };
 
     const status = reward.requires_approval ? "requested" : "approved";
@@ -200,8 +197,6 @@ export async function requestRewardAction(
       .select("id")
       .single();
     if (insertErr) { console.error("[requestRewardAction] insert error:", insertErr); return { ok: false, error: insertErr.message }; }
-
-    console.log("[requestRewardAction] redemption inserted id=", redemption?.id, "status=", status);
 
     // Decrement stock if applicable
     if (reward.stock !== null) {
@@ -465,4 +460,40 @@ export async function refreshPoolAction(formData: FormData) {
   if (error) throw new Error("Already refreshed today");
 
   revalidatePath("/[locale]/child/home", "page");
+}
+
+/**
+ * Child resolves a repair item — marks responsibility_event as RESOLVED.
+ * NEVER awards coins, stars, or triggers confetti.
+ */
+export async function resolveRepairAction(formData: FormData) {
+  const event_id = z.string().uuid().parse(formData.get("event_id"));
+  const session = await getChildSession();
+  if (!session) throw new Error("No child session");
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+
+  // Verify the event belongs to this child and is OPEN
+  const { data: event, error: eventErr } = await admin
+    .from("responsibility_events")
+    .select("id, child_id, status")
+    .eq("id", event_id)
+    .eq("child_id", session.childId)
+    .eq("status", "OPEN")
+    .single();
+  if (eventErr || !event) throw new Error("Repair item not found or already resolved");
+
+  // Resolve it — NO coin/star transactions
+  await admin
+    .from("responsibility_events")
+    .update({
+      status: "RESOLVED",
+      resolved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", event_id);
+
+  revalidatePath("/[locale]/child/home", "page");
+  revalidatePath("/[locale]/approvals", "page");
 }

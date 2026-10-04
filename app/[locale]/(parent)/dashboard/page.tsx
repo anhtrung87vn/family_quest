@@ -1,13 +1,12 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 import { getLevelInfo } from "@/lib/levels";
 import { todayISO } from "@/lib/recurrence";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Link } from "@/lib/i18n/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +18,10 @@ export default async function ParentDashboard({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
-  const supabase = DEV_BYPASS ? createAdminClient() : await createClient();
+  const { familyId, supabase } = await resolveContext();
   const today = todayISO();
 
-  const childrenQ = supabase.from("children").select("id, name, grade, avatar_url, lifetime_stars, current_dream_reward_id");
-  if (DEV_BYPASS) childrenQ.eq("family_id", DEV_FAMILY_ID);
+  const childrenQ = supabase.from("children").select("id, name, grade, avatar_url, lifetime_stars, current_dream_reward_id").eq("family_id", familyId);
 
   const [{ data: children }, { data: balances }, { count: pendingTasks }, { count: pendingRewards }] = await Promise.all([
     childrenQ,
@@ -34,34 +32,53 @@ export default async function ParentDashboard({
   const balMap = new Map((balances ?? []).map((b) => [b.child_id, b]));
   const pendingTotal = (pendingTasks ?? 0) + (pendingRewards ?? 0);
 
-  // Per-child today progress + streak + dream reward
-  const childStats = await Promise.all(
-    (children ?? []).map(async (c) => {
-      const [todayResult, streakResult, dreamResult] = await Promise.all([
+  const childIds = (children ?? []).map((c) => c.id);
+
+  // Batch: fetch today's assignments, streaks, and dream rewards for ALL children at once
+  const [{ data: allTodayTasks }, { data: allStreaks }, { data: allDreamRewards }] = childIds.length
+    ? await Promise.all([
         supabase.from("task_assignments")
-          .select("id, status")
-          .eq("child_id", c.id)
+          .select("id, status, child_id")
+          .in("child_id", childIds)
           .lte("due_date", today)
           .in("status", ["todo", "rejected", "submitted", "approved"]),
         supabase.from("child_streaks")
-          .select("current_streak, longest_streak")
-          .eq("child_id", c.id)
-          .maybeSingle(),
-        c.current_dream_reward_id
-          ? supabase.from("rewards").select("name, coin_cost").eq("id", c.current_dream_reward_id).single()
-          : Promise.resolve({ data: null }),
-      ]);
-      const todayTasks = todayResult.data ?? [];
-      const todayDone = todayTasks.filter((t) => t.status === "approved" || t.status === "submitted").length;
-      return {
-        child: c,
-        todayTotal: todayTasks.length,
-        todayDone,
-        streak: streakResult.data?.current_streak ?? 0,
-        dreamReward: dreamResult.data,
-      };
-    }),
-  );
+          .select("child_id, current_streak, longest_streak")
+          .in("child_id", childIds),
+        (() => {
+          const dreamIds = (children ?? [])
+            .map((c) => c.current_dream_reward_id)
+            .filter((id): id is string => !!id);
+          return dreamIds.length
+            ? supabase.from("rewards").select("id, name, coin_cost").in("id", dreamIds)
+            : Promise.resolve({ data: [] as { id: string; name: string; coin_cost: number }[] });
+        })(),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+
+  // Index batch results by child_id / reward id
+  type TodayTask = { id: string; status: string; child_id: string };
+  const todayTasksByChild = new Map<string, TodayTask[]>();
+  for (const t of (allTodayTasks ?? []) as TodayTask[]) {
+    if (!todayTasksByChild.has(t.child_id)) todayTasksByChild.set(t.child_id, []);
+    todayTasksByChild.get(t.child_id)!.push(t);
+  }
+  const streakByChild = new Map((allStreaks ?? []).map((s) => [s.child_id, s]));
+  const dreamRewardById = new Map((allDreamRewards ?? []).map((r) => [r.id, r]));
+
+  const childStats = (children ?? []).map((c) => {
+    const todayTasks = todayTasksByChild.get(c.id) ?? [];
+    const todayDone = todayTasks.filter((t) => t.status === "approved" || t.status === "submitted").length;
+    const streak = streakByChild.get(c.id);
+    const dreamReward = c.current_dream_reward_id ? dreamRewardById.get(c.current_dream_reward_id) ?? null : null;
+    return {
+      child: c,
+      todayTotal: todayTasks.length,
+      todayDone,
+      streak: streak?.current_streak ?? 0,
+      dreamReward,
+    };
+  });
 
   // Active family quests
   const questsQ = supabase
@@ -70,7 +87,7 @@ export default async function ParentDashboard({
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(3);
-  if (DEV_BYPASS) questsQ.eq("family_id", DEV_FAMILY_ID);
+  questsQ.eq("family_id", familyId);
   const { data: activeQuests } = await questsQ;
 
   // Greeting based on time of day
@@ -210,6 +227,50 @@ export default async function ParentDashboard({
                 <ProgressBar value={q.current_count} max={q.target_count} color="pink" size="sm" className="mt-2" />
               </Card>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* 🧭 Curriculum Insights — quick links + coverage snapshot */}
+      {children && children.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-stone-800">
+            🧭 {t("parent.insightsTitle")}
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Link href="/library">
+              <Card className="transition hover:border-amber-200 hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✨</span>
+                  <div>
+                    <div className="text-sm font-semibold text-stone-800">{t("parent.questLibrary")}</div>
+                    <div className="text-xs text-stone-400">{t("parent.insightsLibraryHint")}</div>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+            <Link href="/stats/coverage">
+              <Card className="transition hover:border-amber-200 hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🧭</span>
+                  <div>
+                    <div className="text-sm font-semibold text-stone-800">{t("parent.coverageTitle")}</div>
+                    <div className="text-xs text-stone-400">{t("parent.coverageDesc")}</div>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+            <Link href="/stats/ladders">
+              <Card className="transition hover:border-amber-200 hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📈</span>
+                  <div>
+                    <div className="text-sm font-semibold text-stone-800">{t("parent.laddersTitle")}</div>
+                    <div className="text-xs text-stone-400">{t("parent.laddersDesc")}</div>
+                  </div>
+                </div>
+              </Card>
+            </Link>
           </div>
         </section>
       )}

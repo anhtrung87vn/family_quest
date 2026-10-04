@@ -29,12 +29,12 @@ export default async function ChildRewards({
 
   const [{ data: rewards }, { data: redemptions }, { coin }, { data: childRow }] = await Promise.all([
     admin.from("rewards")
-      .select("id, name, description, coin_cost, category, dream_eligible, stock, image_url, link_url")
+      .select("id, name, name_vi, description, description_vi, coin_cost, category, dream_eligible, stock, image_url, link_url")
       .eq("family_id", session.familyId)
       .eq("active", true)
       .order("coin_cost"),
     admin.from("reward_redemptions")
-      .select("id, status, coin_cost, requested_at, reward:rewards(id,name)")
+      .select("id, status, coin_cost, requested_at, reward:rewards(id,name,name_vi)")
       .eq("child_id", session.childId)
       .order("requested_at", { ascending: false })
       .limit(30),
@@ -45,11 +45,17 @@ export default async function ChildRewards({
       .single(),
   ]);
 
+  // Helper: pick localized reward name
+  const localRewardName = (r: any): string =>
+    (locale === "vi" && r?.name_vi) ? r.name_vi : (r?.name ?? "");
+  const localRewardDesc = (r: any): string | null =>
+    (locale === "vi" && r?.description_vi) ? r.description_vi : (r?.description ?? null);
+
   // Dream reward
-  let dreamReward: { id: string; name: string; coin_cost: number } | null = null;
+  let dreamReward: { id: string; name: string; name_vi?: string | null; coin_cost: number } | null = null;
   if (childRow?.current_dream_reward_id) {
     const { data: dr } = await admin.from("rewards")
-      .select("id, name, coin_cost")
+      .select("id, name, name_vi, coin_cost")
       .eq("id", childRow.current_dream_reward_id)
       .single();
     if (dr) dreamReward = dr;
@@ -82,7 +88,7 @@ export default async function ChildRewards({
           <div className="mb-1 text-xs font-medium uppercase tracking-wider text-indigo-200">
             🌈 {t("child.myDream")}
           </div>
-          <div className="mb-3 text-lg font-bold">{dreamReward.name}</div>
+          <div className="mb-3 text-lg font-bold">{localRewardName(dreamReward)}</div>
           <ProgressBar value={coin} max={dreamReward.coin_cost} color="amber" size="lg" showPct />
           <div className="mt-2 flex items-center justify-between text-sm">
             <span>🪙 {coin.toLocaleString()}</span>
@@ -112,7 +118,7 @@ export default async function ChildRewards({
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{icon}</span>
                     <div className="flex-1">
-                      <div className="font-semibold text-stone-800">{r.name}</div>
+                      <div className="font-semibold text-stone-800">{localRewardName(r)}</div>
                       <ProgressBar value={coin} max={r.coin_cost} color="amber" size="sm" className="mt-1.5" />
                       <div className="mt-1 text-xs text-stone-500">
                         🪙 {coin.toLocaleString()} / {r.coin_cost.toLocaleString()} — {(r.coin_cost - coin).toLocaleString()} {t("child.dreamMore")}
@@ -170,7 +176,10 @@ export default async function ChildRewards({
 
                   <div className="flex flex-1 flex-col items-center p-3">
                     {!(r as any).image_url && <span className="mb-1.5 text-3xl">{icon}</span>}
-                    <div className="mb-0.5 text-sm font-semibold leading-tight text-stone-800">{r.name}</div>
+                    <div className="mb-0.5 text-sm font-semibold leading-tight text-stone-800">{localRewardName(r)}</div>
+                    {localRewardDesc(r) && (
+                      <div className="mb-1 text-[10px] text-stone-500 line-clamp-2">{localRewardDesc(r)}</div>
+                    )}
                     <div className="mb-1 text-xs font-bold text-amber-600">🪙 {r.coin_cost.toLocaleString()}</div>
                     {(r as any).link_url && (
                       <a href={(r as any).link_url} target="_blank" rel="noopener noreferrer"
@@ -227,7 +236,7 @@ export default async function ChildRewards({
                 <li key={r.id} className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">⏳</span>
-                    <span className="text-sm font-medium">{reward?.name}</span>
+                    <span className="text-sm font-medium">{localRewardName(reward)}</span>
                   </div>
                   <span className="text-xs text-amber-600">🪙 {r.coin_cost} · {t("child.waiting")}</span>
                 </li>
@@ -250,7 +259,7 @@ export default async function ChildRewards({
                 <li key={r.id} className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🎉</span>
-                    <span className="text-sm font-medium text-stone-600">{reward?.name}</span>
+                    <span className="text-sm font-medium text-stone-600">{localRewardName(reward)}</span>
                   </div>
                   <span className="text-xs text-emerald-600">🪙 {r.coin_cost}</span>
                 </li>

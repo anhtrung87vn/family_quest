@@ -1,0 +1,53 @@
+@startuml Reward_Redemption_Flow
+!theme plain
+title Use Case Flow: Reward Redemption
+
+|Child|
+start
+:Open Rewards tab;
+:Browse reward shop;
+:Select reward;
+
+if (Enough coins?) then (yes)
+  :Press **Redeem**;
+
+  |System|
+  :Deduct coins immediately\n(hold pattern);
+  :Insert coin_transaction\n(negative amount);
+  :Redemption status -> **requested**;
+
+  |Parent|
+  :See pending redemption\nin Approvals;
+  :Review request;
+
+  if (Approve?) then (yes)
+    :Press **Approve**;
+
+    |System|
+    :Redemption status -> **approved**;
+    :Coins deduction confirmed;
+
+    |Child|
+    :Receive reward;
+    :See confirmation;
+
+  else (no)
+    |Parent|
+    :Press **Reject**;
+
+    |System|
+    :Refund coins to child;
+    :Insert refund transaction;
+    :Redemption status -> **rejected**;
+
+    |Child|
+    :Coins returned;
+    :See rejection notice;
+  endif
+
+else (no)
+  :Show "Not enough coins"\nmessage;
+endif
+
+stop
+@enduml

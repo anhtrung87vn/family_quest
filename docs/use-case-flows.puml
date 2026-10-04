@@ -1,0 +1,16 @@
+' BloomQuest Family - Use Case Flows
+'
+' Each diagram is in its own file under docs/diagrams/ for PlantUML compatibility.
+' PlantUML requires one @startuml/@enduml block per file.
+'
+' Diagrams:
+'   01-use-case-diagram.puml       - Full use case diagram (actors + use cases)
+'   02-task-completion-flow.puml   - Task Completion & Approval activity flow
+'   03-reward-redemption-flow.puml - Reward Redemption activity flow
+'   04-parent-auth-flow.puml       - Parent Authentication activity flow
+'   05-child-auth-flow.puml        - Child Authentication (PIN) activity flow
+'   06-quest-pool-flow.puml        - Quest Pool Selection activity flow
+'   07-recurring-task-flow.puml    - Recurring Task Generation (Cron) activity flow
+'   08-evidence-lifecycle-flow.puml - Evidence & Memory Lifecycle activity flow
+'   09-habit-fading-flow.puml      - Habit Building & Fading activity flow
+'   10-data-backup-flow.puml       - Data Backup activity flow

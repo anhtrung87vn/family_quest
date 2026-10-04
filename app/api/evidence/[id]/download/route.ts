@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 
 export const dynamic = "force-dynamic";
 
@@ -11,19 +10,13 @@ export async function GET(
 ) {
   const { id: evidenceId } = await params;
 
-  // Authenticate parent
-  let familyId: string | null = null;
-  if (DEV_BYPASS) {
-    familyId = DEV_FAMILY_ID;
-  } else {
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    const admin = createAdminClient();
-    const { data: u } = await admin.from("users").select("family_id").eq("id", auth.user.id).single();
-    familyId = u?.family_id ?? null;
+  // Authenticate parent — always resolves real session first
+  let familyId: string;
+  try {
+    ({ familyId } = await resolveContext());
+  } catch {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!familyId) return NextResponse.json({ error: "no family" }, { status: 403 });
 
   const admin = createAdminClient();
 

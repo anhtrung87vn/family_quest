@@ -3,22 +3,10 @@
 import "@/lib/dev-tls-patch";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_BYPASS, DEV_FAMILY_ID } from "@/lib/dev-family";
+import { resolveContext } from "@/lib/dev-family";
 
-async function requireFamily() {
-  if (DEV_BYPASS) {
-    return { supabase: createAdminClient(), familyId: DEV_FAMILY_ID };
-  }
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Unauthorized");
-  const { data: me } = await supabase
-    .from("users").select("family_id").eq("id", auth.user.id).single();
-  if (!me?.family_id) throw new Error("No family");
-  return { supabase, familyId: me.family_id as string };
-}
+const requireFamily = resolveContext;
 
 const schema = z.object({
   name: z.string().min(1).max(80),
@@ -74,7 +62,7 @@ export async function updateReward(formData: FormData) {
     image_url: (formData.get("image_url") as string)?.trim() || null,
     link_url: (formData.get("link_url") as string)?.trim() || null,
   });
-  const { supabase } = await requireFamily();
+  const { supabase, familyId } = await requireFamily();
   const { error } = await supabase.from("rewards").update({
     name: parsed.name,
     description: parsed.description,
@@ -85,15 +73,15 @@ export async function updateReward(formData: FormData) {
     stock: parsed.stock,
     image_url: parsed.image_url,
     link_url: parsed.link_url,
-  }).eq("id", id);
+  }).eq("id", id).eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");
 }
 
 export async function deleteReward(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
-  const { supabase } = await requireFamily();
-  const { error } = await supabase.from("rewards").delete().eq("id", id);
+  const { supabase, familyId } = await requireFamily();
+  const { error } = await supabase.from("rewards").delete().eq("id", id).eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");
 }
@@ -124,8 +112,12 @@ export async function uploadRewardImage(
 export async function toggleRewardActive(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const active = formData.get("active") === "true";
-  const { supabase } = await requireFamily();
-  const { error } = await supabase.from("rewards").update({ active: !active }).eq("id", id);
+  const { supabase, familyId } = await requireFamily();
+  const { error } = await supabase
+    .from("rewards")
+    .update({ active: !active })
+    .eq("id", id)
+    .eq("family_id", familyId);
   if (error) throw error;
   revalidatePath("/[locale]/rewards", "page");
 }
@@ -137,7 +129,7 @@ export async function cloneRewardTemplates() {
   const admin = createAdminClient();
   const { data: templates, error: fetchErr } = await admin
     .from("rewards")
-    .select("name, description, category, coin_cost, requires_approval, dream_eligible, stock")
+    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
     .eq("family_id", "00000000-0000-0000-0000-000000000000");
   if (fetchErr) throw fetchErr;
   if (!templates?.length) return;
@@ -159,4 +151,34 @@ export async function cloneRewardTemplates() {
   }
 
   revalidatePath("/[locale]/rewards", "page");
+}
+
+export async function resetAndRecloneRewards() {
+  const { supabase, familyId } = await requireFamily();
+  const admin = createAdminClient();
+
+  // Hard-delete ALL non-system family rewards (active + inactive) to avoid
+  // duplicate accumulation from repeated resets (soft-deleted rows were
+  // not excluded from the dedup check, causing duplicates on each run).
+  const { error: delErr } = await admin
+    .from("rewards")
+    .delete()
+    .eq("family_id", familyId)
+    .eq("is_system_template", false);
+  if (delErr) throw delErr;
+
+  // Fetch all system templates including name_vi / description_vi
+  const { data: templates, error: fetchErr } = await admin
+    .from("rewards")
+    .select("name, name_vi, description, description_vi, category, coin_cost, requires_approval, dream_eligible, stock")
+    .eq("family_id", "00000000-0000-0000-0000-000000000000")
+    .eq("is_system_template", true);
+  if (fetchErr) throw fetchErr;
+  if (!templates?.length) return;
+
+  const rows = templates.map((t) => ({ ...t, family_id: familyId, active: true, is_system_template: false }));
+  const { error: insertErr } = await supabase.from("rewards").insert(rows);
+  if (insertErr) throw insertErr;
+
+  revalidatePath("/[locale]/(parent)/rewards", "page");
 }
